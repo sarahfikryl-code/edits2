@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
+import { AVAILABLE_CENTERS } from "../../constants/centers";
 import Title from "../../components/Title";
-import GradeSelect from "../../components/CourseSelect";
+import GradeSelect from "../../components/GradeSelect";
 import CenterSelect from "../../components/CenterSelect";
-import CourseTypeSelect from "../../components/CourseTypeSelect";
 import { SessionTable } from "../../components/SessionTable.jsx";
 import { IconArrowRight, IconSearch, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { ActionIcon, TextInput, useMantineTheme } from '@mantine/core';
@@ -55,8 +55,7 @@ export default function AllStudents() {
   const containerRef = useRef(null);
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedCenter, setSelectedCenter] = useState("");
-  const [selectedCourseType, setSelectedCourseType] = useState("");
-  const [openDropdown, setOpenDropdown] = useState(null); // 'grade', 'center', 'courseType', or null
+  const [openDropdown, setOpenDropdown] = useState(null); // 'grade', 'center', or null
   const [searchInput, setSearchInput] = useState(""); // What user types in the input
   const [searchTerm, setSearchTerm] = useState(""); // Actual search term used in API query
   const [isMobile, setIsMobile] = useState(false);
@@ -70,9 +69,7 @@ export default function AllStudents() {
     limit: pageSize,
     search: searchTerm.trim() || undefined,
     grade: selectedGrade || undefined,
-    course: selectedGrade || undefined,
     center: selectedCenter || undefined,
-    courseType: selectedCourseType || undefined,
     sortBy: 'id',
     sortOrder: 'asc',
   }, {
@@ -97,7 +94,6 @@ export default function AllStudents() {
   useEffect(() => {
     const rememberedGrade = sessionStorage.getItem('allStudentsSelectedGrade');
     const rememberedCenter = sessionStorage.getItem('allStudentsSelectedCenter');
-    const rememberedCourseType = sessionStorage.getItem('allStudentsSelectedCourseType');
     
     if (rememberedGrade) {
       setSelectedGrade(rememberedGrade);
@@ -105,15 +101,12 @@ export default function AllStudents() {
     if (rememberedCenter) {
       setSelectedCenter(rememberedCenter);
     }
-    if (rememberedCourseType) {
-      setSelectedCourseType(rememberedCourseType);
-    }
   }, []);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedGrade, selectedCenter, selectedCourseType, searchTerm]);
+  }, [selectedGrade, selectedCenter, searchTerm]);
 
   // Reset to page 1 when search term becomes empty
   useEffect(() => {
@@ -271,7 +264,7 @@ export default function AllStudents() {
         <div className="filters-container">
           <div className="filter-row">
             <div className="filter-group">
-              <label className="filter-label">Filter by Course</label>
+              <label className="filter-label">Filter by Grade</label>
               <GradeSelect
                 selectedGrade={selectedGrade}
                 onGradeChange={(grade) => {
@@ -285,24 +278,6 @@ export default function AllStudents() {
                 }}
                 isOpen={openDropdown === 'grade'}
                 onToggle={() => setOpenDropdown(openDropdown === 'grade' ? null : 'grade')}
-                onClose={() => setOpenDropdown(null)}
-              />
-            </div>
-            <div className="filter-group">
-              <label className="filter-label">Filter by Course Type</label>
-              <CourseTypeSelect
-                selectedCourseType={selectedCourseType}
-                onCourseTypeChange={(courseType) => {
-                  setSelectedCourseType(courseType);
-                  // Remember the selected course type
-                  if (courseType) {
-                    sessionStorage.setItem('allStudentsSelectedCourseType', courseType);
-                  } else {
-                    sessionStorage.removeItem('allStudentsSelectedCourseType');
-                  }
-                }}
-                isOpen={openDropdown === 'courseType'}
-                onToggle={() => setOpenDropdown(openDropdown === 'courseType' ? null : 'courseType')}
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
@@ -353,18 +328,14 @@ export default function AllStudents() {
             height={400}
             showMainCenter={true}
             showGrade={true}
-            showCourseType={true}
             showSchool={true}
             showAccountStatus={true}
-            showParentsPhone2={true}
-            showAddress={true}
-            showAvailableSessions={true}
             showComment={false}
             showMainComment={false}
             showWeekComment={false}
             showWhatsApp={false}
             showMessageState={false}
-            emptyMessage={searchTerm || selectedGrade || selectedCenter || selectedCourseType
+            emptyMessage={searchTerm || selectedGrade || selectedCenter
               ? "No students found with the current filters."
               : "No students found."
             }
@@ -385,13 +356,13 @@ export default function AllStudents() {
               <div 
                 className={`pagination-page-info ${pagination.totalPages > 1 ? 'clickable' : ''}`}
                 onClick={() => pagination.totalPages > 1 && setShowPagePopup(!showPagePopup)}
-                style={{ position: 'relative', cursor: pagination.totalPages > 1 ? 'pointer' : 'default', zIndex: 9999 }}
+                style={{ position: 'relative', cursor: pagination.totalPages > 1 ? 'pointer' : 'default' }}
               >
                 Page {pagination.currentPage} of {pagination.totalPages}
                 
                 {/* Page Number Popup */}
                 {showPagePopup && pagination.totalPages > 1 && (
-                  <div className="page-popup" style={{ zIndex: 10000 }}>
+                  <div className="page-popup">
                     <div className="page-popup-content">
                       <div className="page-popup-header">Select Page</div>
                       <div className="page-popup-grid">
@@ -544,7 +515,7 @@ export default function AllStudents() {
             left: 50%;
             transform: translateX(-50%);
             margin-bottom: 8px;
-            z-index: 10000;
+            z-index: 1000;
           }
           
           .page-popup-content {

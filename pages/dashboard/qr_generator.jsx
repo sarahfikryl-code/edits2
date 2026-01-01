@@ -299,7 +299,7 @@ export default function QRGenerator() {
           visibility: hidden;
         }
         .hidden-qr .qr-container {
-          background: linear-gradient(180deg, #1FA8DC 0%, #FEB954 100%);
+          background: linear-gradient(180deg, #00101f 0%, #4c84b9 100%);
           padding: 10px;
           border-radius: 20px;
           overflow: hidden;
@@ -328,7 +328,7 @@ export default function QRGenerator() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(180deg, #1FA8DC 0%, #FEB954 100%);
+          background: linear-gradient(180deg, #00101f 0%, #4c84b9 100%);
           padding: 24px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.1);
           margin-left: auto;
@@ -531,7 +531,7 @@ export default function QRGenerator() {
                 <div className="qr-container">
                   <QRCode
                     id="single-qr-svg"
-                    value={`https://link.gettap.co/ahmedbadr92?id=${singleId}`}
+                    value={`https://wa.me/201211172756?text=Hello%2C%20Tony%20your%20attendance%20system%20is%20very%20good%20and%20premium.%20Tell%20me%20about%20the%20system%20more&?id=${singleId}`}
                     size={qrSize}
                     ecLevel="H"
                     logoImage="/logo.png"
@@ -605,7 +605,7 @@ export default function QRGenerator() {
               <div className="qr-container" key={id}>
                 <QRCode
                   id={`hidden-qr-${id}`}
-                  value={`https://link.gettap.co/ahmedbadr92?id=${id}`}
+                  value={`https://wa.me/201211172756?text=Hello%2C%20Tony%20your%20attendance%20system%20is%20very%20good%20and%20premium.%20Tell%20me%20about%20the%20system%20more&?id=${id}`}
                   size={qrSize}
                   ecLevel="H"
                   logoImage="/logo.png"

@@ -42,10 +42,10 @@ export default async function handler(req, res) {
 
   const { id } = req.query;
   const studentId = parseInt(id);
-  const { comment, lesson } = req.body;
+  const { comment, week } = req.body;
 
-  if (!lesson) {
-    return res.status(400).json({ error: 'lesson is required' });
+  if (!week) {
+    return res.status(400).json({ error: 'week is required' });
   }
   if (isNaN(studentId)) {
     return res.status(400).json({ error: 'Invalid student ID' });
@@ -59,22 +59,18 @@ export default async function handler(req, res) {
     // Verify authentication
     await authMiddleware(req);
 
-    // Validate student and lessons
+    // Validate student and weeks
     const student = await db.collection('students').findOne({ id: studentId });
     if (!student) return res.status(404).json({ error: 'Student not found' });
-    
-    // Ensure lessons object exists
-    if (!student.lessons) {
-      await db.collection('students').updateOne(
-        { id: studentId },
-        { $set: { lessons: {} } }
-      );
+    const weekIndex = week - 1;
+    if (!student.weeks || weekIndex < 0 || weekIndex >= student.weeks.length) {
+      return res.status(400).json({ error: `Week ${week} is out of range` });
     }
 
-    // Update comment in the selected lesson
+    // Update comment in the selected week
     await db.collection('students').updateOne(
       { id: studentId },
-      { $set: { [`lessons.${lesson}.comment`]: (comment && String(comment).trim() !== '') ? String(comment).trim() : null } }
+      { $set: { [`weeks.${weekIndex}.comment`]: (comment && String(comment).trim() !== '') ? String(comment).trim() : null } }
     );
 
     return res.json({ success: true });
@@ -82,7 +78,7 @@ export default async function handler(req, res) {
     if (error.message.includes('Unauthorized') || error.message.includes('Invalid token')) {
       return res.status(401).json({ error: error.message });
     }
-    console.error('Error updating lesson comment:', error);
+    console.error('Error updating week comment:', error);
     return res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (client) await client.close();

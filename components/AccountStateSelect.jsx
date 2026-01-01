@@ -12,6 +12,7 @@ const AccountStateSelect = ({
   const dropdownRef = useRef(null);
 
   const options = [
+    { value: '', label: '✕ Clear selection', color: '#dc3545', isClear: true },
     { value: 'Activated', label: '✅ Activated', color: '#28a745' },
     { value: 'Deactivated', label: '❌ Deactivated', color: '#dc3545' }
   ];
@@ -30,16 +31,18 @@ const AccountStateSelect = ({
   }, []);
 
   const handleSelect = (option) => {
-    onChange(option.value);
+    onChange(option.value === '' ? null : option.value);
     setIsOpen(false);
   };
 
 
   return (
-    <div className="form-group" style={{ ...style, marginBottom: '16px' }}>
-      <label>
+    <div className="form-group" style={{ ...style, marginBottom: '16px', textAlign: 'left' }}>
+      {!style.hideLabel && (
+      <label style={{ textAlign: 'left' }}>
         Account State {required && <span style={{color: 'red'}}>*</span>}
       </label>
+      )}
       <div 
         ref={dropdownRef}
         style={{
@@ -87,16 +90,17 @@ const AccountStateSelect = ({
           }}>
             {options.map((option) => (
               <div
-                key={option.value}
+                key={option.value === '' ? 'clear' : option.value}
                 style={{
                   padding: '12px 16px',
                   cursor: 'pointer',
                   borderBottom: '1px solid #f8f9fa',
                   transition: 'background-color 0.2s ease',
-                  color: '#000000'
+                  color: option.isClear ? '#dc3545' : '#000000',
+                  fontWeight: option.isClear ? '500' : 'normal'
                 }}
                 onClick={() => handleSelect(option)}
-                onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                onMouseEnter={(e) => e.target.style.backgroundColor = option.isClear ? '#fff5f5' : '#f8f9fa'}
                 onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}
               >
                 {option.label}

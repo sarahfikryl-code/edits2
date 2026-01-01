@@ -18,14 +18,9 @@ export function SessionTable({
   showMessageState = true,
   showSchool = false,
   showGrade = false,
-  showCourseType = false,
   showAccountStatus = false,
-  showParentsPhone2 = false,
-  showAddress = false,
-  showAvailableSessions = false,
   onMessageStateChange,
-  showStatsColumns = false,
-  lesson = null
+  showStatsColumns = false
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [needsScroll, setNeedsScroll] = useState(false);
@@ -53,87 +48,68 @@ export function SessionTable({
     }
   };
 
-  // Helpers to derive lesson lists for modal
-  const getAbsentLessons = (student) => {
-    let lessons = [];
-    
-    // Get all lessons that exist in the student's database
-    if (student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons)) {
-      lessons = Object.keys(student.lessons).map(lessonName => ({
-        lesson: lessonName,
-        ...student.lessons[lessonName]
-      }));
-    } else if (student.lessons && Array.isArray(student.lessons)) {
-      lessons = student.lessons.filter(l => l && l.lesson);
-    } else if (student.weeks && Array.isArray(student.weeks)) {
-      lessons = student.weeks.map((week, index) => ({
-        lesson: `Lesson ${index + 1}`,
-        ...week
-      }));
-    }
-    
-    // Filter for lessons where attended is explicitly false
-    return lessons
-      .filter(lesson => lesson.attended === false)
-      .map(lesson => ({
-        lesson: lesson.lesson,
-        quizDegree: null
+  // Helpers to derive week lists for modal
+  const getAbsentWeeks = (weeks) => {
+    if (!Array.isArray(weeks)) return [];
+    return weeks
+      .map((w, idx) => ({ idx, w }))
+      .filter(({ w }) => w && w.attended === false)
+      .map(({ idx, w }) => ({
+        week: (w.week ?? idx + 1),
+        attended: w.attended,
+        hwDone: w.hwDone,
+        quizDegree: w.quizDegree,
+        lastAttendance: w.lastAttendance,
+        center: w.lastAttendanceCenter
       }));
   };
 
-  const getMissingHWLessons = (student) => {
-    let lessons = [];
-    if (student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons)) {
-      lessons = Object.values(student.lessons);
-    } else if (student.lessons && Array.isArray(student.lessons)) {
-      lessons = student.lessons;
-    } else if (student.weeks && Array.isArray(student.weeks)) {
-      lessons = student.weeks;
-    }
-    
-    return lessons
-      .filter(l => l && (l.hwDone === false || l.hwDone === "Not Completed" || l.hwDone === "not completed" || l.hwDone === "NOT COMPLETED"))
-      .map(l => ({
-        lesson: l.lesson || l.week,
-        hwDone: l.hwDone,
-        quizDegree: l.quizDegree
+  const getMissingHWWeeks = (weeks) => {
+    if (!Array.isArray(weeks)) return [];
+    return weeks
+      .map((w, idx) => ({ idx, w }))
+      .filter(({ w }) => w && (w.hwDone === false || w.hwDone === "Not Completed" || w.hwDone === "not completed" || w.hwDone === "NOT COMPLETED"))
+      .map(({ idx, w }) => ({
+        week: (w.week ?? idx + 1),
+        attended: w.attended,
+        hwDone: w.hwDone,
+        quizDegree: w.quizDegree,
+        lastAttendance: w.lastAttendance,
+        center: w.lastAttendanceCenter
       }));
   };
 
-  const getUnattendQuizLessons = (student) => {
-    let lessons = [];
-    if (student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons)) {
-      lessons = Object.values(student.lessons);
-    } else if (student.lessons && Array.isArray(student.lessons)) {
-      lessons = student.lessons;
-    } else if (student.weeks && Array.isArray(student.weeks)) {
-      lessons = student.weeks;
-    }
-    
-    return lessons
-      .filter(l => l && (l.quizDegree === "Didn't Attend The Quiz" || l.quizDegree == null))
-      .map(l => ({
-        lesson: l.lesson || l.week,
-        quizDegree: l.quizDegree
+  const getUnattendQuizWeeks = (weeks) => {
+    if (!Array.isArray(weeks)) return [];
+    return weeks
+      .map((w, idx) => ({ idx, w }))
+      .filter(({ w }) => w && (w.quizDegree === "Didn't Attend The Quiz" || w.quizDegree == null))
+      .map(({ idx, w }) => ({
+        week: (w.week ?? idx + 1),
+        attended: w.attended,
+        hwDone: w.hwDone,
+        quizDegree: w.quizDegree,
+        lastAttendance: w.lastAttendance,
+        center: w.lastAttendanceCenter
       }));
   };
 
   const openDetails = (student, type) => {
     let title = '';
-    let lessonsList = [];
+    let weeksList = [];
     if (type === 'absent') {
-      title = `Absent Lessons for ${student.name ?? student.id} • ID: ${student.id}`;
-      lessonsList = getAbsentLessons(student);
+      title = `Absent Sessions for ${student.name ?? student.id} • ID: ${student.id}`;
+      weeksList = getAbsentWeeks(student.weeks);
     } else if (type === 'hw') {
       title = `Missing Homework for ${student.name ?? student.id} • ID: ${student.id}`;
-      lessonsList = getMissingHWLessons(student);
+      weeksList = getMissingHWWeeks(student.weeks);
     } else if (type === 'quiz') {
       title = `Unattended Quizzes for ${student.name ?? student.id} • ID: ${student.id}`;
-      lessonsList = getUnattendQuizLessons(student);
+      weeksList = getUnattendQuizWeeks(student.weeks);
     }
     setDetailsStudent(student);
     setDetailsTitle(title);
-    setDetailsWeeks(lessonsList);
+    setDetailsWeeks(weeksList);
     setDetailsType(type);
     setDetailsOpen(true);
   };
@@ -145,83 +121,10 @@ export function SessionTable({
       <Table.Td style={{ fontWeight: 'bold', color: '#1FA8DC', width: '60px', minWidth: '60px', textAlign: 'center', fontSize: '15px' }}>{student.id}</Table.Td>
       <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center', fontSize: '15px' }}>{student.name}</Table.Td>
       {showGrade && <Table.Td style={{ width: '100px', minWidth: '100px', textAlign: 'center', fontSize: '15px' }}>{student.grade || 'N/A'}</Table.Td>}
-      {showCourseType && <Table.Td style={{ width: '100px', minWidth: '100px', textAlign: 'center', fontSize: '15px' }}>{student.courseType || 'N/A'}</Table.Td>}
-      {showMainCenter && <Table.Td style={{ textAlign: 'center', width: '120px', minWidth: '120px', fontSize: '15px' }}>{student.main_center}</Table.Td>}
       {showSchool && <Table.Td style={{ width: '150px', minWidth: '150px', textAlign: 'center', fontSize: '15px' }}>{student.school || 'N/A'}</Table.Td>}
       <Table.Td style={{ width: '140px', minWidth: '140px', fontFamily: 'monospace', fontSize: '15px', textAlign: 'center' }}>{student.phone || ''}</Table.Td>
-      {showMessageState && (
-        <Table.Td style={{ 
-          textAlign: 'center', 
-          verticalAlign: 'middle',
-          fontWeight: '500',
-          width: '120px',
-          minWidth: '120px',
-          fontSize: '15px'
-        }}>
-          {student.student_message_state ? (
-            <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '15px' }}>✓ Sent</span>
-          ) : (
-            <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '15px' }}>✗ Not Sent</span>
-          )}
-        </Table.Td>
-      )}
-      {showWhatsApp && data.length > 0 && (
-        <Table.Td style={{ 
-          textAlign: 'center', 
-          verticalAlign: 'middle',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100%',
-          width: '120px',
-          minWidth: '120px'
-        }}>
-          <WhatsAppButton 
-            student={student} 
-            onMessageSent={handleMessageSent}
-            lesson={lesson || student.currentLesson || 'If Conditions'}
-            isStudentMessage={true}
-          />
-        </Table.Td>
-      )}
       <Table.Td style={{ width: '140px', minWidth: '140px', fontFamily: 'monospace', fontSize: '15px', textAlign: 'center' }}>{student.parents_phone || student.parentsPhone || ''}</Table.Td>
-      {showMessageState && (
-        <Table.Td style={{ 
-          textAlign: 'center', 
-          verticalAlign: 'middle',
-          fontWeight: '500',
-          width: '120px',
-          minWidth: '120px',
-          fontSize: '15px'
-        }}>
-          {student.parent_message_state ? (
-            <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '15px' }}>✓ Sent</span>
-          ) : (
-            <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '15px' }}>✗ Not Sent</span>
-          )}
-        </Table.Td>
-      )}
-      {showWhatsApp && data.length > 0 && (
-        <Table.Td style={{ 
-          textAlign: 'center', 
-          verticalAlign: 'middle',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100%',
-          width: '120px',
-          minWidth: '120px'
-        }}>
-          <WhatsAppButton 
-            student={student} 
-            onMessageSent={handleMessageSent}
-            lesson={lesson || student.currentLesson || 'If Conditions'}
-            isStudentMessage={false}
-          />
-        </Table.Td>
-      )}
-      {showParentsPhone2 && <Table.Td style={{ width: '140px', minWidth: '140px', fontFamily: 'monospace', fontSize: '15px', textAlign: 'center' }}>{student.parentsPhone2 || student.parents_phone2 || 'N/A'}</Table.Td>}
-      {showAddress && <Table.Td style={{ width: '150px', minWidth: '150px', fontSize: '15px', textAlign: 'center' }}>{student.address || 'N/A'}</Table.Td>}
+      {showMainCenter && <Table.Td style={{ textAlign: 'center', width: '120px', minWidth: '120px', fontSize: '15px' }}>{student.main_center}</Table.Td>}
       {showAccountStatus && (
         <Table.Td style={{ textAlign: 'center', width: '120px', minWidth: '120px', fontSize: '15px' }}>
           {student.account_state === 'Deactivated' ? (
@@ -246,12 +149,7 @@ export function SessionTable({
             } else if (student.hwDone === "Not Completed" || student.hwDone === "not completed" || student.hwDone === "NOT COMPLETED") {
               return <span style={{ color: '#ffc107', fontSize: '15px', fontWeight: 'bold' }}>⚠️ Not Completed</span>;
             } else if (student.hwDone === true) {
-              const homeworkDegree = student.homework_degree;
-              if (homeworkDegree && homeworkDegree !== null && homeworkDegree !== undefined && homeworkDegree !== '') {
-                return <span style={{ color: '#28a745', fontSize: '15px', fontWeight: 'bold' }}>✅ Done ({homeworkDegree})</span>;
-              } else {
-                return <span style={{ color: '#28a745', fontSize: '15px', fontWeight: 'bold' }}>✅ Done</span>;
-              }
+              return <span style={{ color: '#28a745', fontSize: '15px', fontWeight: 'bold' }}>✅ Done</span>;
             } else {
               return <span style={{ color: '#dc3545', fontSize: '15px', fontWeight: 'bold' }}>❌ Not Done</span>;
             }
@@ -284,13 +182,7 @@ export function SessionTable({
         <Table.Td style={{ textAlign: 'center', width: '160px', minWidth: '160px', fontSize: '15px' }}>
           {(() => {
             try {
-              // Use lesson-specific comment if available, otherwise fall back to weeks array
-              if (student.currentLessonName && student.lessons && student.lessons[student.currentLessonName]) {
-                const lessonComment = (student.lessons[student.currentLessonName]?.comment ?? '').toString();
-                return lessonComment.trim() !== '' ? lessonComment : 'No Comment';
-              }
-              
-              // Fallback to weeks array for backward compatibility
+              // Only use the week's comment; do not fall back to main or root comment
               const idx = (typeof student.currentWeekNumber === 'number' && !isNaN(student.currentWeekNumber))
                 ? (student.currentWeekNumber - 1)
                 : -1;
@@ -302,60 +194,53 @@ export function SessionTable({
           })()}
         </Table.Td>
       )}
-      {showAvailableSessions && (
-        <Table.Td style={{ textAlign: 'center', width: '140px', minWidth: '140px', fontSize: '15px' }}>
-          {(() => {
-            // Debug logging
-            if (student.id <= 3) {
-              console.log(`🔍 SessionTable - Student ${student.id}:`, {
-                payment: student.payment,
-                numberOfSessions: student.payment?.numberOfSessions
-              });
-            }
-            return (
-              <span style={{ 
-                color: (student.payment?.numberOfSessions || 0) <= 2 ? '#dc3545' : '#212529',
-                fontWeight: '700',
-                fontSize: '16px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontFamily: 'system-ui, -apple-system, sans-serif'
-              }}>
-                <span style={{ 
-                  fontSize: '18px', 
-                  fontWeight: '800',
-                  lineHeight: '1.2'
-                }}>
-                  {(student.payment?.numberOfSessions || 0)}
-                </span>
-                <span style={{ 
-                  fontSize: '17px', 
-                  fontWeight: '600',
-                  opacity: '0.9',
-                  textTransform: 'lowercase'
-                }}>
-                  sessions
-                </span>
-              </span>
-            );
-          })()}
+      {showMessageState && (
+        <Table.Td style={{ 
+          textAlign: 'center', 
+          verticalAlign: 'middle',
+          fontWeight: '500',
+          width: '120px',
+          minWidth: '120px',
+          fontSize: '15px'
+        }}>
+          {student.message_state ? (
+            <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '15px' }}>✓ Sent</span>
+          ) : (
+            <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '15px' }}>✗ Not Sent</span>
+          )}
+        </Table.Td>
+      )}
+      {showWhatsApp && data.length > 0 && (
+        <Table.Td style={{ 
+          textAlign: 'center', 
+          verticalAlign: 'middle',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100%',
+          width: '120px',
+          minWidth: '120px'
+        }}>
+          <WhatsAppButton 
+            student={student} 
+            onMessageSent={handleMessageSent}
+          />
         </Table.Td>
       )}
       <Table.Td style={{ textAlign: 'center', width: '140px', minWidth: '140px', cursor: 'pointer', fontWeight: 700, color: '#dc3545', fontSize: '15px' }}
         onClick={() => openDetails(student, 'absent')}
-        title="Show absent lessons">
-        {getAbsentLessons(student).length}
+        title="Show absent weeks">
+        {Array.isArray(student.weeks) ? student.weeks.filter(w => w && w.attended === false).length : 0}
       </Table.Td>
       <Table.Td style={{ textAlign: 'center', width: '160px', minWidth: '160px', cursor: 'pointer', fontWeight: 700, color: '#fd7e14', fontSize: '15px' }}
         onClick={() => openDetails(student, 'hw')}
-        title="Show missing homework lessons">
-        {getMissingHWLessons(student).length}
+        title="Show missing homework weeks">
+        {Array.isArray(student.weeks) ? student.weeks.filter(w => w && (w.hwDone === false || w.hwDone === "Not Completed" || w.hwDone === "not completed" || w.hwDone === "NOT COMPLETED")).length : 0}
       </Table.Td>
       <Table.Td style={{ textAlign: 'center', width: '200px', minWidth: '200px', cursor: 'pointer', fontWeight: 700, color: '#1FA8DC', fontSize: '15px' }}
         onClick={() => openDetails(student, 'quiz')}
-        title="Show unattended quiz lessons">
-        {getUnattendQuizLessons(student).length}
+        title="Show unattended quiz weeks">
+        {Array.isArray(student.weeks) ? student.weeks.filter(w => w && (w.quizDegree === "Didn't Attend The Quiz" || w.quizDegree == null)).length : 0}
       </Table.Td>
     </Table.Tr>
   ));
@@ -366,10 +251,6 @@ export function SessionTable({
       let baseWidth = showMainCenter ? 800 : 720; // Compact widths for empty table (increased for statistics columns)
       if (showGrade) baseWidth += 80; // Grade column
       if (showSchool) baseWidth += 100; // School column
-      if (showParentsPhone2) baseWidth += 80; // Parents No. 2
-      if (showAddress) baseWidth += 100; // Address
-      if (showAccountStatus) baseWidth += 80; // Account Status
-      if (showAvailableSessions) baseWidth += 100; // Available Sessions
       if (showHW) baseWidth += 80;
       if (showQuiz) baseWidth += 100;
       if (showComment || showMainComment) baseWidth += 160; // Main Comment
@@ -379,15 +260,11 @@ export function SessionTable({
       baseWidth += 500; // Statistics columns (140 + 160 + 200)
       return baseWidth;
     } else {
-      // Calculate based on actual column widths: ID(60) + Name(120) + Grade(100) + School(150) + Student(140) + Parents(140) + Parents2(140) + Address(150) + MainCenter(120) + AccountStatus(120) + AvailableSessions(140) + AttendanceCenter(140) + MessageState(120) + WhatsApp(120) + Stats(500)
+      // Calculate based on actual column widths: ID(60) + Name(120) + Grade(100) + School(150) + Student(140) + Parents(140) + MainCenter(120) + AttendanceCenter(140) + MessageState(120) + WhatsApp(120) + Stats(500)
       let baseWidth = 60 + 120 + 140 + 140; // ID + Name + Student No. + Parents No.
       if (showGrade) baseWidth += 100; // Grade column
       if (showSchool) baseWidth += 150; // School column
-      if (showParentsPhone2) baseWidth += 140; // Parents No. 2
-      if (showAddress) baseWidth += 150; // Address
       if (showMainCenter) baseWidth += 120; // Main Center
-      if (showAccountStatus) baseWidth += 120; // Account Status
-      if (showAvailableSessions) baseWidth += 140; // Available Sessions
       if (showStatsColumns) baseWidth += 140; // Attendance Center
       baseWidth += 140; // Total absent sessions
       baseWidth += 160; // Total missing homework
@@ -408,27 +285,21 @@ export function SessionTable({
         <Table.Tr>
           <Table.Th style={{ minWidth: data.length === 0 ? '40px' : '60px', width: '60px', textAlign: 'center' }}>ID</Table.Th>
           <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Name</Table.Th>
-          {showGrade && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '100px', width: '100px', textAlign: 'center' }}>Course</Table.Th>}
-          {showCourseType && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '100px', width: '100px', textAlign: 'center' }}>Course Type</Table.Th>}
-          {showMainCenter && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Main Center</Table.Th>}
+          {showGrade && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '100px', width: '100px', textAlign: 'center' }}>Grade</Table.Th>}
           {showSchool && <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '150px', width: '150px', textAlign: 'center' }}>School</Table.Th>}
           <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '140px', width: '140px', textAlign: 'center' }}>Student No.</Table.Th>
-          {showMessageState && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Student Message State</Table.Th>}
-          {showWhatsApp && data.length > 0 && <Table.Th style={{ minWidth: data.length === 0 ? '70px' : '120px', width: '120px', textAlign: 'center' }}>Student Message Button</Table.Th>}
-          <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '140px', width: '140px', textAlign: 'center' }}>Parents No. 1</Table.Th>
-          {showMessageState && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Parent Message State</Table.Th>}
-          {showWhatsApp && data.length > 0 && <Table.Th style={{ minWidth: data.length === 0 ? '70px' : '120px', width: '120px', textAlign: 'center' }}>Parent Message Button</Table.Th>}
-          {showParentsPhone2 && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '140px', width: '140px', textAlign: 'center' }}>Parents No. 2</Table.Th>}
-          {showAddress && <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '150px', width: '150px', textAlign: 'center' }}>Address</Table.Th>}
+          <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '140px', width: '140px', textAlign: 'center' }}>Parents No.</Table.Th>
+          {showMainCenter && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Main Center</Table.Th>}
           {showAccountStatus && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Account Status</Table.Th>}
           {showStatsColumns && <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Attend In</Table.Th>}
           {showHW && <Table.Th style={{ minWidth: data.length === 0 ? '70px' : '120px', width: '120px', textAlign: 'center' }}>HW State</Table.Th>}
           
           {showQuiz && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '140px', width: '140px', textAlign: 'center' }}>Quiz Degree</Table.Th>}
-          {(showComment || showMainComment) && <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Hidden Comment</Table.Th>}
-          {(showComment || showWeekComment) && <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Parent Comment</Table.Th>}
-          {showAvailableSessions && <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Available Sessions</Table.Th>}
-          <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Total Absent Lessons</Table.Th>
+          {(showComment || showMainComment) && <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Main Comment</Table.Th>}
+          {(showComment || showWeekComment) && <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Week Comment</Table.Th>}
+          {showMessageState && <Table.Th style={{ minWidth: data.length === 0 ? '80px' : '120px', width: '120px', textAlign: 'center' }}>Message State</Table.Th>}
+          {showWhatsApp && data.length > 0 && <Table.Th style={{ minWidth: data.length === 0 ? '70px' : '120px', width: '120px', textAlign: 'center' }}>WhatsApp Message</Table.Th>}
+          <Table.Th style={{ minWidth: data.length === 0 ? '100px' : '140px', width: '140px', textAlign: 'center' }}>Total Absent Sessions</Table.Th>
           <Table.Th style={{ minWidth: data.length === 0 ? '120px' : '160px', width: '160px', textAlign: 'center' }}>Total Missing Homework</Table.Th>
           <Table.Th style={{ minWidth: data.length === 0 ? '140px' : '160px', width: '160px', textAlign: 'center' }}>Total Unattend Quizzes</Table.Th>
         </Table.Tr>
@@ -437,7 +308,7 @@ export function SessionTable({
         {data.length === 0 ? (
           <Table.Tr>
               <Table.Td 
-              colSpan={1 + 1 + (showGrade ? 1 : 0) + (showCourseType ? 1 : 0) + (showSchool ? 1 : 0) + 1 + (showMessageState ? 1 : 0) + (showWhatsApp ? 1 : 0) + 1 + (showMessageState ? 1 : 0) + (showWhatsApp ? 1 : 0) + (showParentsPhone2 ? 1 : 0) + (showAddress ? 1 : 0) + (showMainCenter ? 1 : 0) + (showAccountStatus ? 1 : 0) + (showAvailableSessions ? 1 : 0) + (showStatsColumns ? 1 : 0) + (showHW ? 1 : 0) + (showQuiz ? 1 : 0) + (showComment ? 1 : 0) + (showComment ? 1 : 0) + 3} 
+              colSpan={1 + 1 + (showGrade ? 1 : 0) + (showSchool ? 1 : 0) + 1 + 1 + (showMainCenter ? 1 : 0) + 3 + (showHW ? 1 : 0) + (showQuiz ? 1 : 0) + (showComment ? 1 : 0) + (showComment ? 1 : 0) + (showMessageState ? 1 : 0) + (showWhatsApp ? 1 : 0)} 
               style={{ 
                 border: 'none', 
                 padding: 0,
@@ -677,7 +548,7 @@ export function SessionTable({
                 <Table.Tr>
                   <Table.Th style={{ width: '140px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                      📚 Lesson
+                      📅 Week
                     </div>
                   </Table.Th>
                   <Table.Th style={{ textAlign: 'center' }}>
@@ -691,7 +562,7 @@ export function SessionTable({
               </Table.Thead>
               <Table.Tbody>
                 {detailsWeeks.map((info, index) => (
-                  <Table.Tr key={`${detailsStudent?.id}-${info.lesson}`} style={{
+                  <Table.Tr key={`${detailsStudent?.id}-${info.week}`} style={{
                     background: index % 2 === 0 ? '#ffffff' : '#f8f9fa',
                     transition: 'all 0.2s ease'
                   }}>
@@ -711,7 +582,7 @@ export function SessionTable({
                         background: 'white',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                       }}>
-                        {info.lesson}
+                        Week {String(info.week).padStart(2, '0')}
                       </div>
                     </Table.Td>
                     <Table.Td style={{ textAlign: 'center' }}>
@@ -729,7 +600,7 @@ export function SessionTable({
                           fontSize: '0.95rem',
                           boxShadow: '0 2px 4px rgba(244, 67, 54, 0.2)'
                         }}>
-                          ❌ Absent / Didn't attend yet
+                          ❌ Absent
                         </div>
                       )}
                       {detailsType === 'hw' && (
@@ -837,7 +708,7 @@ export function SessionTable({
                   border: '1px solid #dee2e6',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}>
-                  📊 Total: {detailsWeeks.length} {detailsType === 'absent' ? 'absent lessons' : 
+                  📊 Total: {detailsWeeks.length} {detailsType === 'absent' ? 'absent sessions' : 
                              detailsType === 'hw' ? 'missing homework' : 'unattended quizzes'}
                 </div>
               </div>

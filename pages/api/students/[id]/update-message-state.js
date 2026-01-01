@@ -2,7 +2,6 @@ import { MongoClient } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
-import { lessons } from '../../../../constants/lessons.js';
 
 // Load environment variables from env.config
 function loadEnvConfig() {
@@ -47,10 +46,10 @@ export default async function handler(req, res) {
   
   const { id } = req.query;
   const student_id = parseInt(id);
-  const { message_state, lesson, isStudentMessage } = req.body;
+  const { message_state, week } = req.body;
   
   console.log('📱 Updating message state for student:', student_id);
-  console.log('📅 Message state data:', { message_state, lesson, isStudentMessage });
+  console.log('📅 Message state data:', { message_state, week });
   
   let client;
   try {
@@ -75,75 +74,46 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Student account is deactivated' });
     }
     
-    // Determine which lesson to update
-    const lessonName = lesson || lessons[0];
+    // Determine which week to update
+    const weekNumber = week || 1;
+    const weekIndex = weekNumber - 1; // Convert to array index
     
-    // Ensure the target lesson exists; if not, create it with default schema
-    const ensureLessonExists = async () => {
-      console.log(`🔍 Current student lessons structure:`, typeof student.lessons, student.lessons);
-      
-      // Handle case where lessons might be an array (old format) or undefined
-      if (!student.lessons || Array.isArray(student.lessons)) {
-        console.log(`🔄 Normalizing lessons structure for student ${student_id}`);
-        let normalizedLessons = {};
-        if (Array.isArray(student.lessons)) {
-          // Preserve existing data when converting array -> object map keyed by lesson name
-          for (const entry of student.lessons) {
-            if (entry && entry.lesson) {
-              normalizedLessons[entry.lesson] = {
-                lesson: entry.lesson,
-                attended: !!entry.attended,
-                lastAttendance: entry.lastAttendance ?? null,
-                lastAttendanceCenter: entry.lastAttendanceCenter ?? null,
-                hwDone: entry.hwDone ?? false,
-                quizDegree: entry.quizDegree ?? null,
-                comment: entry.comment ?? null,
-                student_message_state: entry.student_message_state ?? false,
-                parent_message_state: entry.parent_message_state ?? false,
-                homework_degree: entry.homework_degree ?? null,
-                paid: entry.paid ?? false
-              };
-            }
-          }
-        }
-        student.lessons = normalizedLessons;
-        // Update the database to use normalized object format (preserving data when present)
-        await db.collection('students').updateOne(
-          { id: student_id },
-          { $set: { lessons: normalizedLessons } }
-        );
-      }
-      
-      if (!student.lessons[lessonName]) {
-        console.log(`🧩 Creating missing lesson "${lessonName}" for student ${student_id}`);
-        const defaultLesson = {
-          lesson: lessonName,
+    // Ensure the target week exists; if not, create weeks up to that index with default schema
+    const ensureWeeksExist = async () => {
+      const currentLength = Array.isArray(student.weeks) ? student.weeks.length : 0;
+      if (currentLength > weekIndex) return; // already exists
+
+      const start = currentLength + 1; // weeks are 1-based
+      const end = weekNumber; // inclusive
+      const additions = [];
+      for (let w = start; w <= end; w++) {
+        additions.push({
+          week: w,
           attended: false,
           lastAttendance: null,
           lastAttendanceCenter: null,
           hwDone: false,
           quizDegree: null,
           comment: null,
-          student_message_state: false,
-          parent_message_state: false,
-          homework_degree: null,
-          paid: false
-        };
+          message_state: false,
+        });
+      }
+      if (additions.length > 0) {
+        console.log(`🧩 Creating missing weeks ${start}..${end} for student ${student_id}`);
         await db.collection('students').updateOne(
           { id: student_id },
-          { $set: { [`lessons.${lessonName}`]: defaultLesson } }
+          { $push: { weeks: { $each: additions } } }
         );
-        // Refresh student in-memory reference
-        student.lessons[lessonName] = defaultLesson;
+        // Refresh student in-memory reference minimally by extending weeks length
+        student.weeks = (student.weeks || []).concat(additions);
       }
     };
 
-    await ensureLessonExists();
+    await ensureWeeksExist();
     
-    // Update the message state for the specific lesson
-    const messageField = isStudentMessage ? 'student_message_state' : 'parent_message_state';
+    // Update the message state for the specific week
     const updateQuery = {
-      [`lessons.${lessonName}.${messageField}`]: !!message_state
+      [`weeks.${weekIndex}.message_state`]: !!message_state
     };
     
     const result = await db.collection('students').updateOne(
@@ -155,7 +125,7 @@ export default async function handler(req, res) {
       console.log('❌ Failed to update student:', student_id);
       return res.status(404).json({ error: 'Student not found' });
     }
-    console.log('✅ Message state updated for student', student_id, 'lesson', lessonName, 'field', messageField, 'to', !!message_state);
+    console.log('✅ Message state updated for student', student_id, 'week', weekNumber, 'to', !!message_state);
     
     res.json({ success: true });
   } catch (error) {

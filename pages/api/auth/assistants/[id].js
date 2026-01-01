@@ -32,16 +32,16 @@ function loadEnvConfig() {
 }
 
 const envConfig = loadEnvConfig();
-const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'mr_ahmad_badr_secret';
-const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/mr-ahmad-badr';
-const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-ahmad-badr';
+const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'topphysics_secret';
+const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
+const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'topphysics';
 
 console.log('🔗 Using Mongo URI:', MONGO_URI);
 
-async function requireAdminOrDeveloper(req) {
+async function requireAdmin(req) {
   const user = await authMiddleware(req);
   if (user.role !== 'admin' && user.role !== 'developer') {
-    throw new Error('Forbidden: Admin or Developer access required');
+    throw new Error('Forbidden: Admins or Developers only');
   }
   return user;
 }
@@ -53,25 +53,22 @@ export default async function handler(req, res) {
     client = await MongoClient.connect(MONGO_URI);
     const db = client.db(DB_NAME);
     
-    // Verify admin or developer access
-    const admin = await requireAdminOrDeveloper(req);
+    // Verify admin access
+    const admin = await requireAdmin(req);
     
     if (req.method === 'GET') {
-      // Get assistant by ID (exclude password field for security)
-      const assistant = await db.collection('assistants').findOne(
-        { id }, 
-        { projection: { password: 0 } } // Exclude password field at database level
-      );
+      // Get assistant by ID (exclude password for security)
+      const assistant = await db.collection('users')
+        .findOne({ id }, { projection: { password: 0 } }); // Exclude password field
       if (!assistant) return res.status(404).json({ error: 'Assistant not found' });
-      // Explicitly remove password field as a safety measure (even though projection excludes it)
-      const { password, ...assistantWithoutPassword } = assistant;
       res.json({ 
-        ...assistantWithoutPassword,
-        account_state: assistant.account_state || "Activated" // Default to Activated
+        ...assistant,
+        account_state: assistant.account_state || "Activated", // Default to Activated
+        ATCA: assistant.ATCA || "no" // Default to no
       });
     } else if (req.method === 'PUT') {
       // Edit assistant - handle partial updates properly
-      const { id: newId, name, phone, password, role, account_state } = req.body;
+      const { id: newId, name, phone, email, password, role, account_state, ATCA } = req.body;
       
       // Build update object with only defined values (not null or undefined)
       const update = {};
@@ -82,6 +79,18 @@ export default async function handler(req, res) {
       if (phone !== undefined && phone !== null && phone.trim() !== '') {
         update.phone = phone;
       }
+      if (email !== undefined) {
+        // Validate email format if provided
+        if (email === null || email === '') {
+          update.email = null;
+        } else if (typeof email === 'string' && email.trim() !== '') {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email.trim())) {
+            return res.status(400).json({ error: 'Invalid email format' });
+          }
+          update.email = email.trim();
+        }
+      }
       if (role !== undefined && role !== null && role.trim() !== '') {
         update.role = role;
       }
@@ -90,7 +99,7 @@ export default async function handler(req, res) {
       }
       if (newId && newId !== id && newId.trim() !== '') {
         // Check for unique new ID
-        const exists = await db.collection('assistants').findOne({ id: newId });
+        const exists = await db.collection('users').findOne({ id: newId });
         if (exists) {
           return res.status(409).json({ error: 'Assistant ID already exists' });
         }
@@ -99,32 +108,33 @@ export default async function handler(req, res) {
       if (account_state !== undefined && account_state !== null) {
         update.account_state = account_state;
       }
+      if (ATCA !== undefined && ATCA !== null) {
+        update.ATCA = ATCA;
+      }
       
       // Only proceed if there are fields to update
       if (Object.keys(update).length === 0) {
         return res.status(400).json({ error: 'No valid fields to update' });
       }
       
-      const result = await db.collection('assistants').updateOne({ id }, { $set: update });
+      const result = await db.collection('users').updateOne({ id }, { $set: update });
       if (result.matchedCount === 0) return res.status(404).json({ error: 'Assistant not found' });
       res.json({ success: true });
     } else if (req.method === 'DELETE') {
       // Delete assistant
-      const result = await db.collection('assistants').deleteOne({ id });
+      const result = await db.collection('users').deleteOne({ id });
       if (result.deletedCount === 0) return res.status(404).json({ error: 'Assistant not found' });
       res.json({ success: true });
     } else {
       res.status(405).json({ error: 'Method not allowed' });
     }
   } catch (error) {
-    console.error('❌ Error in assistants [id] API:', error);
     if (error.message === 'Unauthorized') {
       res.status(401).json({ error: 'Unauthorized' });
-    } else if (error.message === 'Forbidden: Admin or Developer access required') {
-      res.status(403).json({ error: 'Forbidden: Admin or Developer access required' });
+    } else if (error.message === 'Forbidden: Admins only') {
+      res.status(403).json({ error: 'Forbidden: Admins only' });
     } else {
-      console.error('❌ Internal server error details:', error);
-      res.status(500).json({ error: 'Internal server error', details: error.message });
+      res.status(500).json({ error: 'Internal server error' });
     }
   } finally {
     if (client) await client.close();

@@ -2,7 +2,6 @@ import { MongoClient } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../lib/authMiddleware';
-import { lessons } from '../../../constants/lessons.js';
 
 // Load environment variables from env.config
 function loadEnvConfig() {
@@ -67,7 +66,7 @@ export default async function handler(req, res) {
     
     if (req.method === 'GET') {
       // Check if pagination parameters are provided
-      const { page, limit, search, grade, course, center, courseType, sortBy, sortOrder } = req.query;
+      const { page, limit, search, grade, center, sortBy, sortOrder } = req.query;
       const hasPagination = page || limit;
       
       if (hasPagination) {
@@ -78,16 +77,15 @@ export default async function handler(req, res) {
         const currentPage = parseInt(page) || 1;
         const pageSize = parseInt(limit) || 50;
         const searchTerm = search ? search.trim() : '';
-        const gradeFilter = (course ? course.trim() : (grade ? grade.trim() : ''));
+        const gradeFilter = grade ? grade.trim() : '';
         const centerFilter = center ? center.trim() : '';
-        const courseTypeFilter = courseType ? courseType.trim() : '';
         const sortField = sortBy || 'id';
         const sortDirection = sortOrder === 'desc' ? -1 : 1;
         
-        console.log('📋 Pagination params:', { currentPage, pageSize, searchTerm, gradeFilter, centerFilter, courseTypeFilter, sortField, sortDirection });
+        console.log('📋 Pagination params:', { currentPage, pageSize, searchTerm, gradeFilter, centerFilter, sortField, sortDirection });
         
         // Build query filter
-        const queryFilter = {};
+        let queryFilter = {};
         
         if (searchTerm.trim()) {
           const search = searchTerm.trim();
@@ -106,14 +104,13 @@ export default async function handler(req, res) {
               const phoneRegex = new RegExp(search, 'i');
               queryFilter.$or = [
                 { phone: phoneRegex },
-                { parentsPhone: phoneRegex },
-                { parentsPhone2: phoneRegex }
+                { parentsPhone: phoneRegex }
               ];
             }
           } else {
             // Non-numeric search = text search in name and school
             const searchRegex = new RegExp(search, 'i');
-            queryFilter.$or = [
+          queryFilter.$or = [
               { name: searchRegex },
               { school: searchRegex }
             ];
@@ -121,18 +118,11 @@ export default async function handler(req, res) {
         }
         
         if (gradeFilter) {
-          queryFilter.$or = [
-            { course: { $regex: gradeFilter, $options: 'i' } },
-            { grade: { $regex: gradeFilter, $options: 'i' } }
-          ];
+          queryFilter.grade = { $regex: new RegExp(`^${gradeFilter}$`, 'i') };
         }
         
         if (centerFilter) {
-          queryFilter.main_center = { $regex: centerFilter, $options: 'i' };
-        }
-        
-        if (courseTypeFilter) {
-          queryFilter.courseType = { $regex: courseTypeFilter, $options: 'i' };
+          queryFilter.main_center = { $regex: new RegExp(`^${centerFilter}$`, 'i') };
         }
         
         console.log('🔍 Query filter:', JSON.stringify(queryFilter, null, 2));
@@ -152,12 +142,8 @@ export default async function handler(req, res) {
               id: 1,
               name: 1,
               grade: 1,
-              course: 1,
-              courseType: 1,
               phone: 1,
               parentsPhone: 1,
-              parentsPhone2: 1,
-              address: 1,
               center: 1,
               main_center: 1,
               main_comment: 1,
@@ -165,8 +151,7 @@ export default async function handler(req, res) {
               school: 1,
               age: 1,
               account_state: 1,
-              weeks: 1,
-              payment: 1
+              weeks: 1
             }
           })
           .sort({ [sortField]: sortDirection })
@@ -188,7 +173,7 @@ export default async function handler(req, res) {
             const hasWeeks = Array.isArray(student.weeks) && student.weeks.length > 0;
             const currentWeek = hasWeeks ?
               (student.weeks.find(w => w && w.attended) || student.weeks.find(w => w) || student.weeks[0]) :
-              { week: 1, attended: false, lastAttendance: null, lastAttendanceCenter: null, hwDone: false, quizDegree: null, message_state: false, student_message_state: false, parent_message_state: false };
+              { week: 1, attended: false, lastAttendance: null, lastAttendanceCenter: null, hwDone: false, quizDegree: null, message_state: false };
             
             // Robust null checks for currentWeek
             const safeCurrentWeek = currentWeek || { 
@@ -198,23 +183,15 @@ export default async function handler(req, res) {
               lastAttendanceCenter: null, 
               hwDone: false, 
               quizDegree: null, 
-              message_state: false,
-              student_message_state: false,
-              parent_message_state: false
+              message_state: false 
             };
             
-            const courseOrGrade = (student.course ?? student.grade) ?? null;
-            const normalizedCourse = courseOrGrade ? String(courseOrGrade).toUpperCase() : null;
             return {
               id: student.id,
               name: student.name,
-              grade: normalizedCourse, // keep frontend compatibility
-              course: normalizedCourse,
-              courseType: student.courseType || null,
+              grade: student.grade,
               phone: student.phone,
               parents_phone: student.parentsPhone,
-              parentsPhone2: student.parentsPhone2 || null,
-              address: student.address || null,
               center: student.center,
               main_center: student.main_center,
               main_comment: (student.main_comment ?? student.comment ?? null),
@@ -227,10 +204,7 @@ export default async function handler(req, res) {
               school: student.school || null,
               age: student.age || null,
               message_state: safeCurrentWeek.message_state || false,
-              student_message_state: safeCurrentWeek.student_message_state || false,
-              parent_message_state: safeCurrentWeek.parent_message_state || false,
               account_state: student.account_state || "Activated",
-              payment: student.payment || null,
               weeks: student.weeks || []
             };
           });
@@ -240,27 +214,22 @@ export default async function handler(req, res) {
         
         console.log(`📈 Returning ${mappedStudents.length} students for page ${currentPage}`);
         
-        // Debug: Log payment data for first few students
-        console.log('🔍 Payment data debug (paginated):');
-        mappedStudents.slice(0, 3).forEach(student => {
-          console.log(`Student ${student.id}: payment =`, student.payment);
-        });
-        
         res.json({
           data: mappedStudents,
           pagination: {
-            currentPage,
-            pageSize,
-            totalCount,
-            totalPages,
+            currentPage: currentPage,
+            totalPages: totalPages,
+            totalCount: totalCount,
+            limit: pageSize,
             hasNextPage: currentPage < totalPages,
-            hasPrevPage: currentPage > 1
+            hasPrevPage: currentPage > 1,
+            nextPage: currentPage < totalPages ? currentPage + 1 : null,
+            prevPage: currentPage > 1 ? currentPage - 1 : null
           },
           filters: {
             search: searchTerm,
             grade: gradeFilter,
             center: centerFilter,
-            courseType: courseTypeFilter,
             sortBy: sortField,
             sortOrder: sortDirection === 1 ? 'asc' : 'desc'
           }
@@ -276,13 +245,8 @@ export default async function handler(req, res) {
             id: 1,
             name: 1,
             grade: 1,
-            course: 1,
-            courseType: 1,
             phone: 1,
             parentsPhone: 1,
-            parentsPhone1: 1,
-            parentsPhone2: 1,
-            address: 1,
             center: 1,
             main_center: 1,
             main_comment: 1,
@@ -290,9 +254,7 @@ export default async function handler(req, res) {
             school: 1,
             age: 1,
             account_state: 1,
-            weeks: 1,
-            lessons: 1,
-            payment: 1
+            weeks: 1
           }
         }).toArray();
         
@@ -306,54 +268,43 @@ export default async function handler(req, res) {
           const batch = students.slice(i, i + batchSize);
           
           const batchMapped = batch.map(student => {
-            // Derive a basic attendance summary from lessons if present (fallback to weeks otherwise)
-            let safeCurrent = { attended: false, lastAttendance: null, lastAttendanceCenter: null, hwDone: false, quizDegree: null, message_state: false, student_message_state: false, parent_message_state: false };
-            if (student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons)) {
-              const vals = Object.values(student.lessons);
-              if (vals.length) {
-                const attended = vals.filter(l => l && l.attended);
-                const cur = attended.length ? attended[attended.length - 1] : vals[0];
-                if (cur) safeCurrent = { attended: !!cur.attended, lastAttendance: cur.lastAttendance || null, lastAttendanceCenter: cur.lastAttendanceCenter || null, hwDone: !!cur.hwDone, quizDegree: cur.quizDegree ?? null, message_state: !!cur.message_state, student_message_state: !!cur.student_message_state, parent_message_state: !!cur.parent_message_state };
-              }
-            } else if (Array.isArray(student.lessons)) {
-              const attended = student.lessons.filter(l => l && l.attended);
-              const cur = attended.length ? attended[attended.length - 1] : student.lessons[0];
-              if (cur) safeCurrent = { attended: !!cur.attended, lastAttendance: cur.lastAttendance || null, lastAttendanceCenter: cur.lastAttendanceCenter || null, hwDone: !!cur.hwDone, quizDegree: cur.quizDegree ?? null, message_state: !!cur.message_state, student_message_state: !!cur.student_message_state, parent_message_state: !!cur.parent_message_state };
-            } else if (Array.isArray(student.weeks) && student.weeks.length) {
-              const attended = student.weeks.filter(w => w && w.attended);
-              const cur = attended.length ? attended[attended.length - 1] : student.weeks[0];
-              if (cur) safeCurrent = { attended: !!cur.attended, lastAttendance: cur.lastAttendance || null, lastAttendanceCenter: cur.lastAttendanceCenter || null, hwDone: !!cur.hwDone, quizDegree: cur.quizDegree ?? null, message_state: !!cur.message_state, student_message_state: !!cur.student_message_state, parent_message_state: !!cur.parent_message_state };
-            }
+            // Find the current week (last attended week or week 1 if none)
+            const hasWeeks = Array.isArray(student.weeks) && student.weeks.length > 0;
+            const currentWeek = hasWeeks ?
+              (student.weeks.find(w => w && w.attended) || student.weeks.find(w => w) || student.weeks[0]) :
+              { week: 1, attended: false, lastAttendance: null, lastAttendanceCenter: null, hwDone: false, quizDegree: null, message_state: false };
             
-            const courseOrGrade = (student.course ?? student.grade) ?? null;
-            const normalizedCourse = courseOrGrade ? String(courseOrGrade).toUpperCase() : null;
+            // Robust null checks for currentWeek
+            const safeCurrentWeek = currentWeek || { 
+              week: 1, 
+              attended: false, 
+              lastAttendance: null, 
+              lastAttendanceCenter: null, 
+              hwDone: false, 
+              quizDegree: null, 
+              message_state: false 
+            };
+            
             return {
               id: student.id,
               name: student.name,
-              grade: normalizedCourse,
-              course: normalizedCourse,
-              courseType: student.courseType || null,
+              grade: student.grade,
               phone: student.phone,
-              parents_phone: (student.parentsPhone1 || student.parentsPhone || null),
-              parentsPhone2: student.parentsPhone2 || null,
-              address: student.address || null,
+              parents_phone: student.parentsPhone,
               center: student.center,
               main_center: student.main_center,
               main_comment: (student.main_comment ?? student.comment ?? null),
-              attended_the_session: safeCurrent.attended || false,
-              lastAttendance: safeCurrent.lastAttendance || null,
-              lastAttendanceCenter: safeCurrent.lastAttendanceCenter || null,
-              hwDone: safeCurrent.hwDone || false,
-              quizDegree: safeCurrent.quizDegree || null,
+              attended_the_session: safeCurrentWeek.attended || false,
+              lastAttendance: safeCurrentWeek.lastAttendance || null,
+              lastAttendanceCenter: safeCurrentWeek.lastAttendanceCenter || null,
+              attendanceWeek: `week ${String(safeCurrentWeek.week || 1).padStart(2, '0')}`,
+              hwDone: safeCurrentWeek.hwDone || false,
+              quizDegree: safeCurrentWeek.quizDegree || null,
               school: student.school || null,
               age: student.age || null,
-              message_state: safeCurrent.message_state || false,
-              student_message_state: safeCurrent.student_message_state || false,
-              parent_message_state: safeCurrent.parent_message_state || false,
+              message_state: safeCurrentWeek.message_state || false,
               account_state: student.account_state || "Activated",
-              payment: student.payment || null,
-              weeks: student.weeks || [],
-              lessons: student.lessons || {}
+              weeks: student.weeks || []
             };
           });
           
@@ -361,63 +312,38 @@ export default async function handler(req, res) {
         }
         
         console.log(`📈 Returning ${mappedStudents.length} students in original format`);
-        
-        // Debug: Log payment data for first few students
-        console.log('🔍 Payment data debug:');
-        mappedStudents.slice(0, 3).forEach(student => {
-          console.log(`Student ${student.id}: payment =`, student.payment);
-        });
-        
         res.json(mappedStudents);
       }
     } else if (req.method === 'POST') {
       // Add new student
-      const { name, grade, course, courseType, phone, parents_phone, parents_phone2, address, main_center, school, main_comment, comment, account_state } = req.body;
-      const normalizedCourse = (course || grade) ? String(course || grade).toUpperCase() : '';
-      if (!name || !normalizedCourse || !courseType || !phone || !parents_phone || !parents_phone2 || !address || !main_center || !school) {
+      const { id, name, grade, phone, parents_phone, main_center, age, school, main_comment, comment, account_state } = req.body;
+      if (!id || !name || !grade || !phone || !parents_phone || !main_center || age === undefined || !school) {
         return res.status(400).json({ error: 'All fields are required' });
       }
       
-      // Generate new student ID automatically
-      // Find the highest existing ID and increment by 1
-      const lastStudent = await db.collection('students').findOne({}, { sort: { id: -1 } });
-      const newId = lastStudent ? lastStudent.id + 1 : 1;
+      // Check if the custom ID is already used
+      const existingStudent = await db.collection('students').findOne({ id: parseInt(id) });
+      if (existingStudent) {
+        return res.status(400).json({ error: 'This ID is used, please use another ID' });
+      }
       
-      // Create empty lessons object for new students
-      const lessonsObject = {};
+      const newId = parseInt(id);
+      
+      // New students start with no weeks; weeks are created on demand
+      const weeks = [];
       
       const student = {
         id: newId,
         name,
-        course: normalizedCourse,
-        courseType: courseType ? courseType.charAt(0).toUpperCase() + courseType.slice(1).toLowerCase() : courseType,
+        age,
+        grade,
         school,
         phone,
-        parentsPhone1: parents_phone,
-        parentsPhone2: parents_phone2,
-        address: address,
+        parentsPhone: parents_phone,
         main_center,
         main_comment: (main_comment ?? comment ?? null),
         account_state: account_state || "Activated", // Default to Activated
-        lessons: lessonsObject,
-        payment: {
-          numberOfSessions: null,
-          cost: null,
-          paymentComment: null,
-          date: null
-        },
-        mockExams: [
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null },
-          { examDegree: null, outOf: null, percentage: null, date: null }
-        ],
+        weeks: weeks
       };
       await db.collection('students').insertOne(student);
       res.json({ id: newId });

@@ -506,6 +506,7 @@ export default function DeleteAssistant() {
                 <p><strong>Username:</strong> {assistant.id}</p>
                 <p><strong>Name:</strong> {assistant.name}</p>
                 <p><strong>Phone:</strong> {assistant.phone}</p>
+                <p><strong>Email:</strong> {assistant.email}</p>
                 <p><strong>Role:</strong> {assistant.role}</p>
                 <div style={{ marginTop: "20px" }}>
                   {(currentUser && assistant.id === currentUser.assistant_id) ? (

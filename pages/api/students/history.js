@@ -88,16 +88,13 @@ export default async function handler(req, res) {
                 id: 1,
                 name: 1,
                 grade: 1,
-                course: 1,
-                courseType: 1,
                 school: 1,
                 phone: 1,
                 parentsPhone: 1,
-                parentsPhone1: 1,
                 main_center: 1,
                 main_comment: 1,
                 comment: 1,
-                lessons: 1
+                weeks: 1
               }
             }
           ]
@@ -107,61 +104,37 @@ export default async function handler(req, res) {
       // Unwind student array (should be single student)
       { $unwind: '$student' },
       
-      // Add computed fields for the specific lesson
+      // Add computed fields for the specific week
       {
         $addFields: {
-          lessonData: {
-            $cond: {
-              if: {
-                $and: [
-                  { $ne: ['$student.lessons', null] },
-                  { $ne: ['$student.lessons', undefined] }
-                ]
+          weekData: {
+            $let: {
+              vars: {
+                weekIndex: { $subtract: ['$week', 1] },
+                studentWeeks: '$student.weeks'
               },
-              then: {
+              in: {
                 $cond: {
-                  if: { $isArray: '$student.lessons' },
-                  then: {
-                    // Handle old array format - find by lesson name
-                    $arrayElemAt: [
-                      {
-                        $filter: {
-                          input: '$student.lessons',
-                          cond: { $eq: ['$$this.lesson', '$lesson'] }
-                        }
-                      },
-                      0
+                  if: {
+                    $and: [
+                      { $isArray: '$$studentWeeks' },
+                      { $gte: ['$$weekIndex', 0] },
+                      { $lt: ['$$weekIndex', { $size: '$$studentWeeks' }] }
                     ]
                   },
-                  else: {
-                    // Handle new object format - use $objectToArray to convert to array and find matching lesson
-                    $getField: {
-                      field: 'v',
-                      input: {
-                        $arrayElemAt: [
-                          {
-                            $filter: {
-                              input: { $objectToArray: '$student.lessons' },
-                              cond: { $eq: ['$$this.k', '$lesson'] }
-                            }
-                          },
-                          0
-                        ]
-                      }
-                    }
-                  }
+                  then: { $arrayElemAt: ['$$studentWeeks', '$$weekIndex'] },
+                  else: null
                 }
-              },
-              else: null
+              }
             }
           }
         }
       },
       
-      // Filter out records where lesson data doesn't exist or student didn't attend
+      // Filter out records where week data doesn't exist or student didn't attend
       {
         $match: {
-          'lessonData.attended': true
+          'weekData.attended': true
         }
       },
       
@@ -169,66 +142,42 @@ export default async function handler(req, res) {
       {
         $project: {
           studentId: 1,
-          lesson: 1,
+          week: 1,
           student: {
             id: '$student.id',
             name: '$student.name',
-            grade: { $toUpper: { $ifNull: ['$student.course', '$student.grade'] } },
-            course: { $toUpper: { $ifNull: ['$student.course', '$student.grade'] } },
-            courseType: '$student.courseType',
+            grade: '$student.grade',
             school: '$student.school',
             phone: '$student.phone',
-            parentsPhone: { $ifNull: ['$student.parentsPhone', '$student.parentsPhone1'] },
+            parentsPhone: '$student.parentsPhone',
             main_center: '$student.main_center',
             main_comment: { $ifNull: ['$student.main_comment', '$student.comment'] },
-            lessons: '$student.lessons'
+            weeks: '$student.weeks'
           },
           historyRecord: {
             studentId: 1,
-            lesson: { $ifNull: ['$lesson', 1] }, // Ensure lesson is always present
+            week: { $ifNull: ['$week', 1] }, // Ensure week is always present
             main_center: '$student.main_center',
-            center: { $ifNull: ['$lessonData.lastAttendanceCenter', 'n/a'] },
-            attendanceDate: { $ifNull: ['$lessonData.lastAttendance', 'n/a'] },
-            hwDone: { $ifNull: ['$lessonData.hwDone', false] },
-            homework_degree: { $ifNull: ['$lessonData.homework_degree', null] },
-            hwDegree: { $ifNull: ['$lessonData.hwDegree', null] },
-            quizDegree: { $ifNull: ['$lessonData.quizDegree', null] },
-            message_state: { $ifNull: ['$lessonData.message_state', false] },
-            student_message_state: { $ifNull: ['$lessonData.student_message_state', false] },
-            parent_message_state: { $ifNull: ['$lessonData.parent_message_state', false] }
+            center: { $ifNull: ['$weekData.lastAttendanceCenter', 'n/a'] },
+            attendanceDate: { $ifNull: ['$weekData.lastAttendance', 'n/a'] },
+            hwDone: { $ifNull: ['$weekData.hwDone', false] },
+            quizDegree: { $ifNull: ['$weekData.quizDegree', null] },
+            message_state: { $ifNull: ['$weekData.message_state', false] }
           }
         }
       },
       
-      // Sort by student ID and lesson
-      { $sort: { 'student.id': 1, lesson: 1 } }
+      // Sort by student ID and week
+      { $sort: { 'student.id': 1, week: 1 } }
     ];
     
     console.log('🚀 Executing aggregation pipeline...');
-    let aggregationResult;
-    try {
-      aggregationResult = await db.collection('history').aggregate(pipeline).toArray();
-      console.log(`✅ Aggregation completed: ${aggregationResult.length} records`);
-    } catch (aggregationError) {
-      console.error('❌ Aggregation failed:', aggregationError);
-      return res.status(500).json({ 
-        error: 'Failed to fetch history data', 
-        details: aggregationError.message 
-      });
-    }
+    const aggregationResult = await db.collection('history').aggregate(pipeline).toArray();
+    console.log(`✅ Aggregation completed: ${aggregationResult.length} records`);
     
-    // Debug: Check first few records for lesson data
+    // Debug: Check first few records for week data
     if (aggregationResult.length > 0) {
       console.log('🔍 Sample record structure:', JSON.stringify(aggregationResult[0], null, 2));
-    } else {
-      console.log('🔍 No records found in aggregation result');
-      // Let's check what's in the history collection
-      const totalHistoryRecords = await db.collection('history').countDocuments();
-      console.log(`📊 Total history records in collection: ${totalHistoryRecords}`);
-      if (totalHistoryRecords > 0) {
-        const sampleHistoryRecord = await db.collection('history').findOne();
-        console.log('🔍 Sample history record:', JSON.stringify(sampleHistoryRecord, null, 2));
-      }
     }
     
     // Group by student to match the expected frontend format
@@ -247,20 +196,19 @@ export default async function handler(req, res) {
             id: item.student.id,
             name: item.student.name,
             grade: item.student.grade,
-            courseType: item.student.courseType,
             school: item.student.school,
             phone: item.student.phone,
             parentsPhone: item.student.parentsPhone,
             main_comment: item.student.main_comment || '',
-            lessons: Array.isArray(item.student.lessons) ? item.student.lessons : [],
+            weeks: Array.isArray(item.student.weeks) ? item.student.weeks : [],
           historyRecords: []
         });
       }
       
-      // Ensure lesson is properly set in historyRecord
+      // Ensure week is properly set in historyRecord
       const historyRecord = {
         ...item.historyRecord,
-        lesson: item.historyRecord.lesson || 1 // Fallback to lesson 1 if not present
+        week: item.historyRecord.week || 1 // Fallback to week 1 if not present
       };
       
       studentHistoryMap.get(studentId).historyRecords.push(historyRecord);

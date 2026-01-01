@@ -2,7 +2,6 @@ import { MongoClient } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
-import { lessons } from '../../../../constants/lessons.js';
 
 // Load environment variables from env.config
 function loadEnvConfig() {
@@ -47,16 +46,15 @@ export default async function handler(req, res) {
   
   const { id } = req.query;
   const student_id = parseInt(id);
-  const { attended, lastAttendance, lastAttendanceCenter, attendanceLesson } = req.body;
+  const { attended, lastAttendance, lastAttendanceCenter, attendanceWeek } = req.body;
   
-  if (attendanceLesson === undefined || attendanceLesson === null) {
-    console.log('❌ attendanceLesson missing in request body for student', student_id);
-    return res.status(400).json({ error: 'attendanceLesson is required' });
+  if (attendanceWeek === undefined || attendanceWeek === null) {
+    console.log('❌ attendanceWeek missing in request body for student', student_id);
+    return res.status(400).json({ error: 'attendanceWeek is required' });
   }
   
   console.log('🎯 Toggling attendance for student:', student_id);
-  console.log('📅 Attendance data:', { attended, lastAttendance, lastAttendanceCenter, attendanceLesson });
-  console.log('📅 Full request body:', req.body);
+  console.log('📅 Attendance data:', { attended, lastAttendance, lastAttendanceCenter, attendanceWeek });
   
   let client;
   try {
@@ -81,110 +79,67 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Student account is deactivated' });
     }
     
-    // Determine which lesson to update
-    const lessonName = attendanceLesson || lessons[0];
+    // Determine which week to update
+    const weekNumber = attendanceWeek || 1;
+    const weekIndex = weekNumber - 1; // Convert to array index
     
-    // Ensure the target lesson exists; if not, create it with default schema
-    const ensureLessonExists = async () => {
-      console.log(`🔍 Current student lessons structure:`, typeof student.lessons, student.lessons);
-      
-      // Handle case where lessons might be an array (old format) or undefined
-      if (!student.lessons || Array.isArray(student.lessons)) {
-        console.log(`🔄 Converting lessons from array to object format for student ${student_id}`);
-        student.lessons = {};
-        // Update the database to use object format
-        await db.collection('students').updateOne(
-          { id: student_id },
-          { $set: { lessons: {} } }
-        );
-      }
-      
-      if (!student.lessons[lessonName]) {
-        console.log(`🧩 Creating missing lesson "${lessonName}" for student ${student_id}`);
-        await db.collection('students').updateOne(
-          { id: student_id },
-          { $set: { [`lessons.${lessonName}`]: {
-            lesson: lessonName,
-            attended: false,
-            lastAttendance: null,
-            lastAttendanceCenter: null,
-            attendanceDate: null,
-            hwDone: false,
-            quizDegree: null,
-            comment: null,
-            message_state: false,
-            homework_degree: null,
-            paid: false
-          } } }
-        );
-        // Refresh student in-memory reference
-        student.lessons[lessonName] = {
-          lesson: lessonName,
+    // Ensure the target week exists; if not, create weeks up to that index with default schema
+    const ensureWeeksExist = async () => {
+      const currentLength = Array.isArray(student.weeks) ? student.weeks.length : 0;
+      if (currentLength > weekIndex) return; // already exists
+
+      const start = currentLength + 1; // weeks are 1-based
+      const end = weekNumber; // inclusive
+      const additions = [];
+      for (let w = start; w <= end; w++) {
+        additions.push({
+          week: w,
           attended: false,
           lastAttendance: null,
           lastAttendanceCenter: null,
-          attendanceDate: null,
           hwDone: false,
           quizDegree: null,
           comment: null,
           message_state: false,
-          homework_degree: null,
-          paid: false
-        };
+        });
+      }
+      if (additions.length > 0) {
+        console.log(`🧩 Creating missing weeks ${start}..${end} for student ${student_id}`);
+        await db.collection('students').updateOne(
+          { id: student_id },
+          { $push: { weeks: { $each: additions } } }
+        );
+        // Refresh student in-memory reference minimally by extending weeks length
+        student.weeks = (student.weeks || []).concat(additions);
       }
     };
 
-    await ensureLessonExists();
+    await ensureWeeksExist();
     
     if (attended) {
-      // Check if student has available sessions or if this lesson is already paid
-      const currentSessions = student.payment?.numberOfSessions || 0;
-      const isLessonPaid = student.lessons && student.lessons[lessonName] && student.lessons[lessonName].paid === true;
-      
-      if (currentSessions <= 0 && !isLessonPaid) {
-        console.log('❌ Student has no available sessions and lesson is not paid:', student_id);
-        return res.status(400).json({ error: 'No available sessions' });
-      }
-      
-      // Compute attendance date in DD/MM/YYYY format using local timezone
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = String(now.getFullYear());
-      const attendanceDateOnly = `${day}/${month}/${year}`;
-
-      // Mark as attended and set paid to true
+      // Mark as attended
       const updateQuery = {
-        [`lessons.${lessonName}.attended`]: true,
-        [`lessons.${lessonName}.lastAttendance`]: lastAttendance || null,
-        [`lessons.${lessonName}.lastAttendanceCenter`]: lastAttendanceCenter || null,
-        [`lessons.${lessonName}.attendanceDate`]: attendanceDateOnly,
-        [`lessons.${lessonName}.paid`]: true
+        [`weeks.${weekIndex}.week`]: weekNumber,
+        [`weeks.${weekIndex}.attended`]: true,
+        [`weeks.${weekIndex}.lastAttendance`]: lastAttendance || null,
+        [`weeks.${weekIndex}.lastAttendanceCenter`]: lastAttendanceCenter || null
       };
       
-      // Only decrement sessions if lesson wasn't already paid
-      if (!isLessonPaid && currentSessions > 0) {
-        updateQuery['payment.numberOfSessions'] = currentSessions - 1;
-      }
-      
-      console.log('🔧 Updating database with query:', updateQuery);
       const result = await db.collection('students').updateOne(
         { id: student_id },
         { $set: updateQuery }
       );
       
-      console.log('🔧 Database update result:', result);
-      
       if (result.matchedCount === 0) {
         console.log('❌ Failed to update student:', student_id);
         return res.status(404).json({ error: 'Student not found' });
       }
-      console.log('✅ Student marked as attended for lesson', lessonName, 'and sessions decremented to', currentSessions - 1);
+      console.log('✅ Student marked as attended for week', weekNumber);
       
-      // Create simplified history record (only studentId and lesson)
+      // Create simplified history record (only studentId and week)
       const historyRecord = {
         studentId: student.id,
-        lesson: lessonName
+        week: weekNumber
       };
       
       console.log('📝 Creating simplified history record:', historyRecord);
@@ -194,28 +149,16 @@ export default async function handler(req, res) {
     } else {
       // Mark as not attended (unattend)
       // Also reset hw and quiz since student didn't attend
-      const currentSessions = student.payment?.numberOfSessions || 0;
-      const wasLessonPaid = student.lessons && student.lessons[lessonName] && student.lessons[lessonName].paid === true;
-      
       const updateQuery = {
-        [`lessons.${lessonName}.attended`]: false,
-        [`lessons.${lessonName}.lastAttendance`]: null,
-        [`lessons.${lessonName}.lastAttendanceCenter`]: null,
-        [`lessons.${lessonName}.attendanceDate`]: null,
-        [`lessons.${lessonName}.hwDone`]: false,
-        [`lessons.${lessonName}.quizDegree`]: null,
-        [`lessons.${lessonName}.comment`]: null,
-        [`lessons.${lessonName}.message_state`]: false,
-        [`lessons.${lessonName}.student_message_state`]: false,
-        [`lessons.${lessonName}.parent_message_state`]: false,
-        [`lessons.${lessonName}.homework_degree`]: null,
-        [`lessons.${lessonName}.paid`]: false
+        [`weeks.${weekIndex}.week`]: weekNumber,
+        [`weeks.${weekIndex}.attended`]: false,
+        [`weeks.${weekIndex}.lastAttendance`]: null,
+        [`weeks.${weekIndex}.lastAttendanceCenter`]: null,
+        [`weeks.${weekIndex}.hwDone`]: false,
+        [`weeks.${weekIndex}.quizDegree`]: null,
+        [`weeks.${weekIndex}.comment`]: null,
+        [`weeks.${weekIndex}.message_state`]: false
       };
-      
-      // Only increment sessions back if the lesson was paid (meaning it consumed a session)
-      if (wasLessonPaid) {
-        updateQuery['payment.numberOfSessions'] = currentSessions + 1;
-      }
       
       const result = await db.collection('students').updateOne(
         { id: student_id },
@@ -226,12 +169,12 @@ export default async function handler(req, res) {
         console.log('❌ Failed to update student:', student_id);
         return res.status(404).json({ error: 'Student not found' });
       }
-      console.log('✅ Student marked as not attended for lesson', lessonName, 'and sessions incremented to', currentSessions + 1);
+      console.log('✅ Student marked as not attended for week', weekNumber);
       
-      // Remove simplified history record for this student and lesson
+      // Remove simplified history record for this student and week
       const historyDeleteResult = await db.collection('history').deleteMany({
         studentId: student_id,
-        lesson: lessonName
+        week: weekNumber
       });
       console.log('🗑️ Removed', historyDeleteResult.deletedCount, 'history records');
     }

@@ -3,6 +3,8 @@ import { useRouter } from "next/router";
 import BackToDashboard from "../../components/BackToDashboard";
 import Title from '../../components/Title';
 import { useStudents, useStudent, useDeleteStudent } from '../../lib/api/students';
+import apiClient from '../../lib/axios';
+import { useQuery } from '@tanstack/react-query';
 
 export default function DeleteStudent() {
   const router = useRouter();
@@ -19,6 +21,25 @@ export default function DeleteStudent() {
   const { data: allStudents } = useStudents();
   const { data: student, isLoading: studentLoading, error: studentError } = useStudent(searchId, { enabled: !!searchId });
   const deleteStudentMutation = useDeleteStudent();
+
+  // Get user account data to get email from users collection
+  const { data: userAccount, isLoading: accountLoading } = useQuery({
+    queryKey: ['student-account', searchId],
+    queryFn: async () => {
+      if (!searchId) return null;
+      try {
+        const response = await apiClient.get(`/api/auth/students/${searchId}/account`);
+        return response.data;
+      } catch (err) {
+        if (err.response?.status === 404) {
+          return null; // Account doesn't exist
+        }
+        throw err;
+      }
+    },
+    enabled: !!searchId && !!student,
+    retry: false,
+  });
 
   useEffect(() => {
     // Authentication is now handled by _app.js with HTTP-only cookies
@@ -52,58 +73,35 @@ export default function DeleteStudent() {
     const searchTerm = studentId.trim();
     setLastCheckedId(searchTerm);
     
-    const isAllDigits = /^\d+$/.test(searchTerm);
-    const isFullPhone = /^\d{11}$/.test(searchTerm);
-    if (isFullPhone) { 
+    // Check if it's a numeric ID
+    if (/^\d+$/.test(searchTerm)) {
+      // It's a numeric ID, search directly
+      setSearchId(searchTerm);
+    } else {
+      // It's a name, search through all students (case-insensitive, includes)
       if (allStudents) {
-        const matchingStudents = allStudents.filter(s =>
-          s.phone === searchTerm || s.parentsPhone1 === searchTerm || s.parentsPhone === searchTerm
+        const matchingStudents = allStudents.filter(student => 
+          student.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
+        
         if (matchingStudents.length === 1) {
-          setSearchId(matchingStudents[0].id.toString());
-          setStudentId(matchingStudents[0].id.toString()); // Auto-replace with ID
+          // Single match, use it directly
+          const foundStudent = matchingStudents[0];
+          setSearchId(foundStudent.id.toString());
+          setLastCheckedId(foundStudent.id.toString()); // Update with actual ID for consistency
+          setStudentId(foundStudent.id.toString());
+        } else if (matchingStudents.length > 1) {
+          // Multiple matches, show selection
+          setSearchResults(matchingStudents);
+          setShowSearchResults(true);
+          setError(`Found ${matchingStudents.length} students. Please select one.`);
         } else {
-          setSearchId(searchTerm);
+          setError(`No student found with name starting with "${searchTerm}"`);
+          setSearchId("");
         }
       } else {
-        setSearchId(searchTerm);
+        setError("Student data not loaded. Please try again.");
       }
-      setLastCheckedId(searchTerm); 
-      return; 
-    }
-    if (isAllDigits) {
-      if (allStudents) {
-        const byId = allStudents.find(s => String(s.id) === searchTerm);
-        if (byId) { setSearchId(String(byId.id)); setLastCheckedId(String(byId.id)); setStudentId(String(byId.id)); return; }
-        const matches = allStudents.filter(s => {
-          const sp = String(s.phone||'').replace(/[^0-9]/g,'');
-          const pp = String(s.parents_phone||s.parentsPhone||'').replace(/[^0-9]/g,'');
-          return sp.startsWith(searchTerm) || pp.startsWith(searchTerm);
-        });
-        if (matches.length === 1) { const f = matches[0]; setSearchId(String(f.id)); setLastCheckedId(String(f.id)); setStudentId(String(f.id)); return; }
-        if (matches.length > 1) { setSearchResults(matches); setShowSearchResults(true); setError(`Found ${matches.length} students. Please select one.`); return; }
-      }
-      setSearchId(searchTerm); setLastCheckedId(searchTerm); return;
-    }
-    if (allStudents) {
-      const matchingStudents = allStudents.filter(student => 
-        student.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      if (matchingStudents.length === 1) {
-        const foundStudent = matchingStudents[0];
-        setSearchId(foundStudent.id.toString());
-        setLastCheckedId(foundStudent.id.toString());
-        setStudentId(foundStudent.id.toString());
-      } else if (matchingStudents.length > 1) {
-        setSearchResults(matchingStudents);
-        setShowSearchResults(true);
-        setError(`Found ${matchingStudents.length} students. Please select one.`);
-      } else {
-        setError(`No student found matching "${searchTerm}"`);
-        setSearchId("");
-      }
-    } else {
-      setError("Student data not loaded. Please try again.");
     }
   };
 
@@ -406,7 +404,7 @@ export default function DeleteStudent() {
                     setShowSearchResults(false);
                   }
                 }}
-                placeholder="Enter Student ID, Name, Phone Number"
+                placeholder="Enter student ID or Name"
                 disabled={studentLoading || deleteStudentMutation.isPending}
                 required
               />
@@ -463,10 +461,7 @@ export default function DeleteStudent() {
                     <div style={{ fontWeight: "600", color: "#dc3545" }}>
                       {student.name} (ID: {student.id})
                     </div>
-                    <div style={{ fontSize: "0.9rem", color: "#495057", marginTop: 4 }}>
-                      <span style={{ fontFamily: 'monospace' }}>{student.phone || 'N/A'}</span>
-                    </div>
-                    <div style={{ fontSize: "0.9rem", color: "#6c757d", marginTop: 2 }}>
+                    <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
                       {student.grade} • {student.main_center}
                     </div>
                   </button>
@@ -481,25 +476,28 @@ export default function DeleteStudent() {
             {student && (
               <div className="student-info">
                 <h3>Student Found:</h3>
-                <p><strong>Student name:</strong> {student.name}</p>
-                <p><strong>Course:</strong> {student.grade}</p>
-                <p><strong>Course Type:</strong> {student.courseType || 'N/A'}</p>
+                <p><strong>Name:</strong> {student.name}</p>
+                {student.age && <p><strong>Age:</strong> {student.age}</p>}
+                <p><strong>Grade:</strong> {student.grade}</p>
                 <p><strong>School:</strong> {student.school}</p>
-                <p><strong>Student phone:</strong> {student.phone}</p>
-                <p><strong>Parent's phone 1:</strong> {student.parents_phone || student.parentsPhone || 'N/A'}</p>
-                <p><strong>Parent's phone 2:</strong> {student.parentsPhone2 || 'N/A'}</p>
-                <p><strong>Address:</strong> {student.address || 'N/A'}</p>
-                <p><strong>Main center:</strong> {student.main_center}</p>
-                <p><strong>Hidden comment:</strong> {student.main_comment || "No Comment"}</p>
+                <p><strong>Phone:</strong> {student.phone}</p>
+                <p><strong>Email:</strong> {userAccount?.email || student.email || 'No Email'}</p>
+                <p><strong>Parent's Phone:</strong> {student.parents_phone || student.parentsPhone}</p>
+                <p><strong>Main Center:</strong> {student.main_center}</p>
+                <p><strong>Main Comment:</strong> {student.main_comment ||"No Comment"}</p>
                 
                 <div style={{ marginTop: "20px" }}>
                   <p style={{ color: "#dc3545", fontWeight: "bold", marginBottom: "16px" }}>
-                    ⚠️ Are you sure you want to delete this student? This action cannot be undone.
+                    {userAccount ? (
+                      <>⚠️ Are you sure you want to delete this student's account? This will delete their account and regenerate a new VAC code. This action cannot be undone.</>
+                    ) : (
+                      <>⚠️ Are you sure you want to delete this student? This action cannot be undone.</>
+                    )}
                   </p>
                   <button 
                     className="submit-btn"
                     onClick={() => setShowConfirm(true)}
-                    disabled={deleteStudentMutation.isPending}
+                    disabled={deleteStudentMutation.isPending || accountLoading}
                   >
                     🗑️ Yes, Delete Student
                   </button>
@@ -512,8 +510,18 @@ export default function DeleteStudent() {
           <div className="confirm-modal">
             <div className="confirm-content">
               <h3>Confirm Delete</h3>
+              {userAccount ? (
+                <>
+                  <p>Are you sure you want to delete student <strong>{student?.name}</strong> (ID: {studentId})?</p>
+                  <p>This will delete their account and regenerate a new VAC code.</p>
+                  <p><strong>This action cannot be undone!</strong></p>
+                </>
+              ) : (
+                <>
               <p>Are you sure you want to delete student <strong>{student?.name}</strong> (ID: {studentId})?</p>
               <p><strong>This action cannot be undone!</strong></p>
+                </>
+              )}
               <div className="confirm-buttons">
                 <button
                   onClick={deleteStudent}

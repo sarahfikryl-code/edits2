@@ -31,9 +31,9 @@ function loadEnvConfig() {
 
 const envConfig = loadEnvConfig();
 const MONGO_URI =
-  envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/mr-ahmad-badr';
+  envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/demo-attendance-system';
 const DB_NAME =
-  envConfig.DB_NAME || process.env.DB_NAME || 'mr-ahmad-badr';
+  envConfig.DB_NAME || process.env.DB_NAME || 'demo-attendance-system';
 
 console.log('🔗 Using Mongo URI:', MONGO_URI);
 

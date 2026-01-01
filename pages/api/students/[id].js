@@ -3,8 +3,7 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
 import { getCookieValue } from '../../../lib/cookies';
-import { authMiddleware } from "../../../lib/authMiddleware";
-import { lessons } from '../../../constants/lessons.js';
+import { authMiddleware } from "../../../lib/authMiddleware"
 
 // Load environment variables from env.config
 function loadEnvConfig() {
@@ -44,9 +43,7 @@ console.log('🔗 Using Mongo URI:', MONGO_URI);
 
 export default async function handler(req, res) {
   const { id } = req.query;
-  const idStr = String(id || '').trim();
-  const isNumericId = /^[0-9]+$/.test(idStr);
-  const student_id = isNumericId ? parseInt(idStr, 10) : null;
+  const student_id = parseInt(id);
   let client;
   try {
     client = await MongoClient.connect(MONGO_URI);
@@ -56,88 +53,51 @@ export default async function handler(req, res) {
     const user = await authMiddleware(req);
     
     if (req.method === 'GET') {
-      // Get student info by id or phone (student or parent)
-      let student = null;
-      const normalized = idStr.replace(/[^0-9]/g, '');
-      if (student_id !== null && idStr.length < 10) {
-        // Short numeric token -> most likely ID; try ID first
-        student = await db.collection('students').findOne({ id: student_id });
-      }
-      if (!student && normalized) {
-        // Try phone search (11-digit local numbers)
-        student = await db.collection('students').findOne({
-          $or: [
-            { phone: normalized },
-            { parentsPhone: normalized },
-            { parentsPhone1: normalized }
-          ]
-        });
-      }
+      // Get student info
+      const student = await db.collection('students').findOne({ id: student_id });
       if (!student) return res.status(404).json({ error: 'Student not found' });
       
-      // Find the current lesson (last attended lesson or default if none)
-      let currentLesson;
-      if (student.lessons && typeof student.lessons === 'object') {
-        const attendedLessons = Object.values(student.lessons).filter(l => l && l.attended);
-        currentLesson = attendedLessons.length > 0 ? 
-          attendedLessons[attendedLessons.length - 1] : 
-          Object.values(student.lessons)[0];
-      }
-      if (!currentLesson) {
-        currentLesson = { lesson: lessons[0], attended: false, lastAttendance: null, lastAttendanceCenter: null, hwDone: false, quizDegree: null, message_state: false };
-      }
+      // Find the current week (last attended week or default if none)
+      const hasWeeks = Array.isArray(student.weeks) && student.weeks.length > 0;
+      const currentWeek = hasWeeks ?
+        (student.weeks.find(w => w && w.attended) || student.weeks.find(w => w) || student.weeks[0]) :
+        { week: 1, attended: false, lastAttendance: null, lastAttendanceCenter: null, hwDone: false, quizDegree: null, message_state: false };
       
-      let lastAttendance = currentLesson.lastAttendance;
-      if (currentLesson.lastAttendance && currentLesson.lastAttendanceCenter) {
+      let lastAttendance = currentWeek.lastAttendance;
+      if (currentWeek.lastAttendance && currentWeek.lastAttendanceCenter) {
         // Try to parse the date part and reformat
-        const dateMatch = currentLesson.lastAttendance.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
-        let dateStr = currentLesson.lastAttendance;
+        const dateMatch = currentWeek.lastAttendance.match(/(\d{2})[-/](\d{2})[-/](\d{4})/);
+        let dateStr = currentWeek.lastAttendance;
         if (dateMatch) {
           dateStr = `${dateMatch[1]}/${dateMatch[2]}/${dateMatch[3]}`;
         }
-        lastAttendance = `${dateStr} in ${currentLesson.lastAttendanceCenter}`;
+        lastAttendance = `${dateStr} in ${currentWeek.lastAttendanceCenter}`;
       }
       
-      const courseOrGrade = (student.course ?? student.grade) ?? null;
-      const normalizedCourse = courseOrGrade ? String(courseOrGrade).toUpperCase() : null;
       res.json({
         id: student.id,
         name: student.name,
-        grade: normalizedCourse,
-        course: normalizedCourse, // alias for backward and new usage
-        courseType: student.courseType || null,
+        grade: student.grade,
         phone: student.phone,
-        parents_phone: student.parentsPhone1 || student.parentsPhone, // Support both old and new field names
+        parents_phone: student.parentsPhone,
         center: student.center,
         main_center: student.main_center,
         main_comment: (student.main_comment ?? student.comment ?? null),
-        attended_the_session: currentLesson.attended,
+        attended_the_session: currentWeek.attended,
         lastAttendance: lastAttendance,
-        lastAttendanceCenter: currentLesson.lastAttendanceCenter,
-        attendanceLesson: currentLesson.lesson,
-        hwDone: currentLesson.hwDone,
-        homework_degree: currentLesson.homework_degree,
+        lastAttendanceCenter: currentWeek.lastAttendanceCenter,
+        attendanceWeek: `week ${String(currentWeek.week).padStart(2, '0')}`,
+        hwDone: currentWeek.hwDone,
         school: student.school || null,
-        parentsPhone2: (student.parentsPhone2 || student.parents_phone2 || null),
-        address: student.address || null,
         age: student.age || null,
-        quizDegree: currentLesson.quizDegree,
-        message_state: currentLesson.message_state,
-        student_message_state: currentLesson.student_message_state,
-        parent_message_state: currentLesson.parent_message_state,
-        account_state: student.account_state || "Activated", // Default to Activated
-        lessons: student.lessons || [], // Include the full lessons array
-        payment: student.payment || null, // Include payment data
-        mockExams: student.mockExams && Array.isArray(student.mockExams) ? student.mockExams : Array(10).fill(null).map(() => ({
-          examDegree: null,
-          outOf: null,
-          percentage: null,
-          date: null
-        })) // Include mock exam data
+        quizDegree: currentWeek.quizDegree,
+        message_state: currentWeek.message_state,
+        account_state: student.account_state || "Deactivated", // Default to Deactivated if not found
+        weeks: student.weeks || [] // Include the full weeks array
       });
     } else if (req.method === 'PUT') {
       // Edit student - handle partial updates properly
-      const { name, grade, course, courseType, phone, parents_phone, parents_phone2, address, main_center, school, main_comment, comment, account_state } = req.body;
+      const { name, grade, phone, parents_phone, main_center, age, school, main_comment, comment, account_state } = req.body;
       
       // Build update object with only defined values (not null or undefined)
       const update = {};
@@ -145,29 +105,25 @@ export default async function handler(req, res) {
       if (name !== undefined && name !== null) {
         update.name = name;
       }
-      const normalizedCourse = (course !== undefined && course !== null) ? String(course).toUpperCase()
-        : (grade !== undefined && grade !== null) ? String(grade).toUpperCase() : undefined;
-      if (normalizedCourse !== undefined) {
-        update.course = normalizedCourse;
-        // Optionally remove legacy grade on write or keep for BC; we'll keep both for now
-      }
-      if (courseType !== undefined && courseType !== null) {
-        update.courseType = courseType ? courseType.charAt(0).toUpperCase() + courseType.slice(1).toLowerCase() : courseType;
+      if (grade !== undefined && grade !== null) {
+        update.grade = grade;
       }
       if (phone !== undefined && phone !== null) {
         update.phone = phone;
       }
       if (parents_phone !== undefined && parents_phone !== null) {
-        update.parentsPhone1 = parents_phone;
-      }
-      if (parents_phone2 !== undefined && parents_phone2 !== null) {
-        update.parentsPhone2 = parents_phone2;
-      }
-      if (address !== undefined && address !== null) {
-        update.address = address;
+        update.parentsPhone = parents_phone;
       }
       if (main_center !== undefined && main_center !== null) {
         update.main_center = main_center;
+      }
+      if (age !== undefined) {
+        // Handle empty string or null age - set to null in database
+        if (age === '' || age === null) {
+          update.age = null;
+        } else {
+          update.age = age;
+        }
       }
       if (school !== undefined && school !== null) {
         update.school = school;
@@ -195,9 +151,79 @@ export default async function handler(req, res) {
       res.json({ success: true });
     } else if (req.method === 'DELETE') {
       // Delete student
+      // First, check if student has an account in users collection
+      const userAccount = await db.collection('users').findOne({
+        id: student_id,
+        role: 'student'
+      });
+
+      let deletedEmail = null;
+      let newVAC = null;
+
+      // If user account exists, delete it and regenerate VAC
+      if (userAccount) {
+        deletedEmail = userAccount.email || null;
+
+        // Delete the user account
+        await db.collection('users').deleteOne({
+          id: student_id,
+          role: 'student'
+        });
+
+        // Generate new VAC code
+        const generateVACCode = () => {
+          const numbers = '0123456789';
+          const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+          
+          const numPart = Array.from({ length: 3 }, () => 
+            numbers[Math.floor(Math.random() * numbers.length)]
+          ).join('');
+          
+          const upperPart = Array.from({ length: 2 }, () => 
+            uppercase[Math.floor(Math.random() * uppercase.length)]
+          ).join('');
+          
+          const lowerPart = Array.from({ length: 2 }, () => 
+            lowercase[Math.floor(Math.random() * lowercase.length)]
+          ).join('');
+          
+          const code = (numPart + upperPart + lowerPart).split('');
+          for (let i = code.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [code[i], code[j]] = [code[j], code[i]];
+          }
+          
+          return code.join('');
+        };
+
+        const code = generateVACCode();
+        // Shuffle the code again for extra randomness
+        newVAC = code.split('').sort(() => Math.random() - 0.5).join('');
+
+        // Update or create VAC record with new code
+        await db.collection('VAC').updateOne(
+          { account_id: student_id },
+          { 
+            $set: { 
+              VAC: newVAC,
+              VAC_activated: false
+            } 
+          },
+          { upsert: true }
+        );
+      }
+
+      // Delete student from students collection
       const result = await db.collection('students').deleteOne({ id: student_id });
       if (result.deletedCount === 0) return res.status(404).json({ error: 'Student not found' });
-      res.json({ success: true });
+      
+      res.json({ 
+        success: true,
+        accountDeleted: !!userAccount,
+        email: deletedEmail,
+        VAC: newVAC
+      });
     } else {
       res.status(405).json({ error: 'Method not allowed' });
     }

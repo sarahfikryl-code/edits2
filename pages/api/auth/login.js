@@ -32,9 +32,9 @@ function loadEnvConfig() {
 }
 
 const envConfig = loadEnvConfig();
-const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'mr_ahmad_badr_secret';
-const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/mr-ahmad-badr';
-const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-ahmad-badr';
+const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'topphysics_secret';
+const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
+const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-george-magdy';
 
 console.log('🔗 Using Mongo URI:', MONGO_URI);
 
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   try {
     client = await MongoClient.connect(MONGO_URI);
     const db = client.db(DB_NAME);
-    const assistant = await db.collection('assistants').findOne({ id: assistant_id });
+    const assistant = await db.collection('users').findOne({ id: assistant_id });
     if (!assistant) {
       return res.status(401).json({ error: 'user_not_found' });
     }
@@ -59,9 +59,32 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'wrong_password' });
     }
     
-    // Check if assistant account is deactivated
-    if (assistant.account_state === 'Deactivated') {
-      return res.status(403).json({ error: 'account_deactivated' });
+    // Check account_state based on role
+    let accountState = null;
+    
+    if (assistant.role === 'student') {
+      // For students, get account_state from students collection
+      const student = await db.collection('students').findOne({ id: assistant.id });
+      if (student) {
+        // Use account_state if it exists, otherwise default to 'Deactivated'
+        accountState = student.account_state || 'Deactivated';
+      } else {
+        // If student not found in students collection, treat as deactivated
+        accountState = 'Deactivated';
+      }
+    } else {
+      // For non-students, get account_state from users collection
+      // Use account_state if it exists, otherwise default to 'Deactivated'
+      accountState = assistant.account_state || 'Deactivated';
+    }
+    
+    // Only allow login if account_state is "Activated"
+    if (accountState !== 'Activated') {
+      if (assistant.role === 'student') {
+        return res.status(403).json({ error: 'student_account_deactivated' });
+      } else {
+        return res.status(403).json({ error: 'account_deactivated' });
+      }
     }
 
     // Check subscription status
@@ -96,9 +119,9 @@ export default async function handler(req, res) {
         }
       }
 
-      // If subscription is inactive, only allow developers
+      // If subscription is inactive, only allow developers and students
       if (!subscription.active) {
-        if (assistant.role !== 'developer') {
+        if (assistant.role !== 'developer' && assistant.role !== 'student') {
           return res.status(403).json({ 
             error: 'subscription_inactive',
             message: 'Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.' 
@@ -110,8 +133,8 @@ export default async function handler(req, res) {
         const expTime = expirationDate.getTime();
         
         if (nowTime >= expTime) {
-          // Subscription expired, only allow developers
-          if (assistant.role !== 'developer') {
+          // Subscription expired, only allow developers and students
+          if (assistant.role !== 'developer' && assistant.role !== 'student') {
             return res.status(403).json({ 
               error: 'subscription_expired',
               message: 'Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.' 
@@ -125,15 +148,15 @@ export default async function handler(req, res) {
     const token = jwt.sign(
       { assistant_id: assistant.id, name: assistant.name, role: assistant.role },
       JWT_SECRET,
-      { expiresIn: '3h' }
+      { expiresIn: '6h' }
     );
     
     // Set HTTP-only cookie with the token
     res.setHeader('Set-Cookie', [
-      `token=${token}; HttpOnly; Secure=false; SameSite=Strict; Path=/; Max-Age=${3 * 60 * 60}` // 3 hours
+      `token=${token}; HttpOnly; Secure=false; SameSite=Strict; Path=/; Max-Age=${6 * 60 * 60}` // 6 hours
     ]);
     
-    res.json({ success: true, message: 'Login successful' });
+    res.json({ success: true, message: 'Login successful', role: assistant.role });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   } finally {

@@ -10,7 +10,6 @@ export default function Custom404() {
   return (
     <div style={{ 
       minHeight: "100vh",
-      background: "linear-gradient(380deg, #1FA8DC 0%, #FEB954 100%)",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",

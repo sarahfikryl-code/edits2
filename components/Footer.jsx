@@ -14,7 +14,7 @@ export default function Footer() {
       marginTop: 'auto',
       flexShrink: 0
     }}>
-      Copyright &copy; {year} - Mr. Ahmed Badr
+      Copyright &copy; {year} - Tony Joseph
 
       <style jsx>{`
         @media (max-width: 768px) {

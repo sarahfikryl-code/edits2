@@ -1,20 +1,31 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useProfile } from '../lib/api/auth';
+import { useProfile, useProfilePicture } from '../lib/api/auth';
 import { useSubscription } from '../lib/api/subscription';
+import { useStudent } from '../lib/api/students';
+import QRCodeModal from './QRCodeModal';
+import InstallApp from './InstallApp';
 import apiClient from '../lib/axios';
+import Image from 'next/image';
 
 export default function UserMenu() {
   const [open, setOpen] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [showInstallApp, setShowInstallApp] = useState(false);
   const menuRef = useRef(null);
   const router = useRouter();
   
   // Use React Query to get user profile data
   const { data: user, isLoading, error } = useProfile();
   const { data: subscription } = useSubscription();
+  const { data: profilePictureUrl } = useProfilePicture();
 
   // Fallback user object if data is not available yet
   const userData = user || { name: '', id: '', phone: '', role: '' };
+  
+  // If user is a student, fetch student data from students collection
+  const studentId = userData.role === 'student' && userData.id ? userData.id.toString() : null;
+  const { data: studentData } = useStudent(studentId, { enabled: !!studentId });
 
   // Subscription countdown timer
   const [timeRemaining, setTimeRemaining] = useState(null);
@@ -22,6 +33,14 @@ export default function UserMenu() {
 
   useEffect(() => {
     const isDeveloper = userData.role === 'developer';
+    const isStudent = userData.role === 'student';
+
+    // Don't show subscription timer for students
+    if (isStudent) {
+      setTimeRemaining(null);
+      hasLoggedOutRef.current = false;
+      return;
+    }
 
     // Simple logic: if active = false AND date_of_expiration = null, show expired
     // Otherwise, if date_of_expiration exists, calculate timer
@@ -44,10 +63,26 @@ export default function UserMenu() {
       const diff = expiration - now;
 
       // Calculate time components (use Math.max to ensure non-negative)
-      const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-      const hours = Math.max(0, Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
-      const minutes = Math.max(0, Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)));
-      const seconds = Math.max(0, Math.floor((diff % (1000 * 60)) / 1000));
+      let days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+      let hours = Math.max(0, Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+      let minutes = Math.max(0, Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)));
+      let seconds = Math.max(0, Math.floor((diff % (1000 * 60)) / 1000));
+
+      // Redistribute time: if hours is 00 and days > 0, borrow 1 day to fill hours
+      if (hours === 0 && days > 0) {
+        days -= 1;
+        hours = 24;
+      }
+      // If minutes is 00 and hours > 0, borrow 1 hour to fill minutes
+      if (minutes === 0 && hours > 0) {
+        hours -= 1;
+        minutes = 60;
+      }
+      // If seconds is 00 and minutes > 0, borrow 1 minute to fill seconds
+      if (seconds === 0 && minutes > 0) {
+        minutes -= 1;
+        seconds = 60;
+      }
 
       // Update timer with calculated values (always set, even if zero)
       setTimeRemaining({ days, hours, minutes, seconds });
@@ -112,7 +147,7 @@ export default function UserMenu() {
   };
 
   const handleEditProfile = () => {
-    router.push('/manage_assistants/edit_my_profile');
+    router.push('/dashboard/edit_my_profile');
   };
 
   const handleContactDeveloper = () => {
@@ -123,26 +158,55 @@ export default function UserMenu() {
     router.push('/subscription_dashboard');
   };
 
+  const handleChangePassword = () => {
+    router.push('/student_dashboard/change_password');
+  };
+
+  const handleMyQRCode = () => {
+    setOpen(false); // Close the menu
+    setShowQRModal(true);
+  };
+
+  const handleInstallApp = () => {
+    setOpen(false); // Close the menu
+    setShowInstallApp(true);
+  };
+
+
   return (
     <div style={{ position: 'relative', marginRight: 32 }} ref={menuRef}>
       <div
         style={{
-          width: 44,
-          height: 44,
+          width: 50,
+          height: 50,
           borderRadius: '50%',
-          background: '#e9ecef',
+          background: profilePictureUrl ? 'transparent' : '#e9ecef',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
           boxShadow: open ? '0 2px 8px rgba(31,168,220,0.15)' : 'none',
           border: open ? '2px solid #1FA8DC' : '2px solid #e9ecef',
-          transition: 'box-shadow 0.2s, border 0.2s'
+          transition: 'box-shadow 0.2s, border 0.2s',
+          overflow: 'hidden',
+          position: 'relative'
         }}
         onClick={() => setOpen((v) => !v)}
         title={userData.name || userData.id}
       >
-        {/* Use user image if available, else fallback to initial */}
+        {/* Use profile picture if available, else fallback to initial */}
+        {profilePictureUrl ? (
+          <Image
+            src={profilePictureUrl}
+            alt="Profile"
+            fill
+            style={{
+              objectFit: 'cover',
+              borderRadius: '50%'
+            }}
+            unoptimized
+          />
+        ) : (
         <span style={{ 
           fontWeight: 700, 
           fontSize: 22, 
@@ -155,20 +219,35 @@ export default function UserMenu() {
           lineHeight: 1,
           textAlign: 'center'
         }}>
-          {userData.name ? userData.name[0].toUpperCase() : (userData.id ? userData.id[0].toUpperCase() : 'U')}
+          {(() => {
+            const displayName = userData.role === 'student' && studentData?.name 
+              ? studentData.name 
+              : userData.name;
+            const displayId = userData.role === 'student' && studentData?.id 
+              ? studentData.id.toString() 
+              : userData.id?.toString();
+            
+            if (displayName && displayName.length > 0) {
+              return displayName[0].toUpperCase();
+            } else if (displayId && displayId.length > 0) {
+              return displayId[0].toUpperCase();
+            }
+            return 'U';
+          })()}
         </span>
+        )}
       </div>
       {open && (
         <div style={{
           position: 'absolute',
           top: 54,
-          right: 0,
+          right: 25,
           minWidth: 270,
           background: '#fff',
           borderRadius: 16,
           boxShadow: '0 8px 32px rgba(31,168,220,0.18)',
           border: '1.5px solid #e9ecef',
-          zIndex: 100,
+          zIndex: 10000,
           padding: '0 0 8px 0',
         }}>
           <div style={{
@@ -177,12 +256,30 @@ export default function UserMenu() {
             textAlign: 'left',
             marginBottom: 8
           }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: '#1FA8DC', marginBottom: 2 }}>{userData.name || userData.id}</div>
-            <div style={{ color: '#495057', fontSize: 15, fontWeight: 600 }}>
-              {userData.id ? `Username: ${userData.id}` : 'No Username'}
-            </div>
+            {userData.role === 'student' && studentData ? (
+              <>
+                <div style={{ fontWeight: 800, fontSize: 18, color: '#1FA8DC', marginBottom: 8 }}>
+                  {studentData.name || 'Student'}
+                </div>
+                <div style={{ color: '#495057', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                  ID: {studentData.id}
+                </div>
+                {studentData.grade && (
+                  <div style={{ color: '#495057', fontSize: 15, fontWeight: 600 }}>
+                    Grade: {studentData.grade}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight: 800, fontSize: 18, color: '#1FA8DC', marginBottom: 2 }}>{userData.name || userData.id}</div>
+                <div style={{ color: '#495057', fontSize: 15, fontWeight: 600 }}>
+                  {userData.id ? `Username: ${userData.id}` : 'No Username'}
+                </div>
+              </>
+            )}
           </div>
-          {subscription && (
+          {subscription && userData.role !== 'student' && (
             <div style={{
               padding: '12px 20px',
               borderBottom: '1px solid #e9ecef',
@@ -225,16 +322,35 @@ export default function UserMenu() {
             </div>
           )}
           <button style={menuBtnStyle} onClick={handleLogout}>Logout</button>
-          {(userData.role === 'admin' || userData.role === 'developer') && (
-            <button style={menuBtnStyle} onClick={handleManageAssistants}>Manage Assistants</button>
+          {userData.role === 'student' && (
+            <>
+              <button style={menuBtnStyle} onClick={handleChangePassword}>Change My Password</button>
+              <button style={menuBtnStyle} onClick={handleMyQRCode}>My Qr Code</button>
+            </>
           )}
-          {userData.role === 'developer' && (
-            <button style={menuBtnStyle} onClick={handleSubscriptionDashboard}>Subscription Dashboard</button>
+          {userData.role !== 'student' && (
+            <>
+              <button style={menuBtnStyle} onClick={handleEditProfile}>Edit My Profile</button>
+              {(userData.role === 'admin' || userData.role === 'developer') && (
+                <button style={menuBtnStyle} onClick={handleManageAssistants}>Manage Assistants</button>
+              )}
+              {(userData.role === 'admin' || userData.role === 'developer' || userData.role === 'assistant') && (
+                <button style={menuBtnStyle} onClick={() => {
+                  setOpen(false);
+                  router.push('/dashboard/manage_online_system');
+                }}>Manage Online System</button>
+              )}
+              {userData.role === 'developer' && (
+                <button style={menuBtnStyle} onClick={handleSubscriptionDashboard}>Subscription Dashboard</button>
+              )}
+            </>
           )}
-          <button style={menuBtnStyle} onClick={handleEditProfile}>Edit My Profile</button>
           <button style={menuBtnStyle} onClick={handleContactDeveloper}>Contact Developer</button>
+          <button style={menuBtnStyle} onClick={handleInstallApp}>Install App</button>
         </div>
       )}
+      <QRCodeModal isOpen={showQRModal} onClose={() => setShowQRModal(false)} />
+      <InstallApp isOpen={showInstallApp} onClose={() => setShowInstallApp(false)} />
     </div>
   );
 }
@@ -253,4 +369,4 @@ const menuBtnStyle = {
   transition: 'background 0.15s',
   marginBottom: 2,
   outline: 'none',
-};
+}; 

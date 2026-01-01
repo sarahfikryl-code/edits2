@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Image from 'next/image';
-import { TextInput, PasswordInput, Anchor, Group, Text } from '@mantine/core';
+import { TextInput, PasswordInput, Anchor, Group, Text, Modal } from '@mantine/core';
 import { FloatingLabelInput } from '../components/FloatingLabelInput';
 import { useLogin } from '../lib/api/auth';
+import NeedHelp from '../components/NeedHelp';
 
 export default function Login() {
   const [assistant_id, setAssistantId] = useState("");
@@ -13,10 +14,73 @@ export default function Login() {
   const [usernameError, setUsernameError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [redirectMessage, setRedirectMessage] = useState("");
+  const [otpPopupOpen, setOtpPopupOpen] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [devToolsDetected, setDevToolsDetected] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const router = useRouter();
   
   // React Query login mutation
   const loginMutation = useLogin();
+
+  // DevTools detection on login page (show for ALL users including developers)
+  useEffect(() => {
+    let checkInterval;
+    
+    // Check user role (but don't skip detection for developers on login page)
+    const checkUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setUserRole(userData.role);
+        }
+      } catch (error) {
+        // Ignore errors - user not logged in yet
+      }
+      
+      // Run devtools detection for ALL users on login page
+      const detectDevTools = () => {
+        const widthDiff = window.outerWidth - window.innerWidth;
+        const heightDiff = window.outerHeight - window.innerHeight;
+        
+        if (widthDiff > 160 || heightDiff > 160) {
+          setDevToolsDetected(true);
+          return;
+        }
+
+        const consoleStart = performance.now();
+        console.log('%c', '');
+        const consoleEnd = performance.now();
+        
+        if (consoleEnd - consoleStart > 1) {
+          setDevToolsDetected(true);
+          return;
+        }
+
+        setDevToolsDetected(false);
+      };
+
+      // Start detection for all users
+      checkInterval = setInterval(detectDevTools, 500);
+      detectDevTools();
+    };
+    
+    checkUserRole();
+
+    return () => {
+      if (checkInterval) {
+        clearInterval(checkInterval);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (message) {
@@ -33,6 +97,24 @@ export default function Login() {
   }, [forgotMsg]);
 
   useEffect(() => {
+    if (otpError) {
+      const timer = setTimeout(() => setOtpError(""), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [otpError]);
+
+  useEffect(() => {
+    // Load ID and password from sessionStorage
+    const storedId = sessionStorage.getItem('student_id');
+    const storedPassword = sessionStorage.getItem('student_password');
+    
+    if (storedId) {
+      setAssistantId(storedId);
+    }
+    if (storedPassword) {
+      setPassword(storedPassword);
+    }
+
     // Check if user is already authenticated by making a request to the server
     const checkAuthStatus = async () => {
       try {
@@ -43,8 +125,13 @@ export default function Login() {
         });
         
         if (response.ok) {
-          // User is authenticated, redirect to dashboard
-          window.location.href = "/dashboard";
+          const userData = await response.json();
+          // User is authenticated, redirect based on role
+          if (userData.role === 'student') {
+            window.location.href = "/student_dashboard";
+          } else {
+            window.location.href = "/dashboard";
+          }
           return;
         }
         // If response is not ok (401 or other), user is not authenticated, stay on login page
@@ -60,6 +147,19 @@ export default function Login() {
 
     // Check authentication status
     checkAuthStatus();
+
+    // Load username/id and password from sessionStorage (from forgot password page)
+    if (typeof window !== 'undefined') {
+      const savedUsername = sessionStorage.getItem('forgot_password_username');
+      const savedPassword = sessionStorage.getItem('forgot_password_password');
+      
+      if (savedUsername) {
+        setAssistantId(savedUsername);
+      }
+      if (savedPassword) {
+        setPassword(savedPassword);
+      }
+    }
 
     // Check if user was redirected from a protected page
     const cookies = document.cookie.split(';');
@@ -92,53 +192,357 @@ export default function Login() {
     }
   }, [passwordError]);
 
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => {
+        setResendCooldown(resendCooldown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
+
+  // Check resend_expiration from database when OTP popup opens
+  useEffect(() => {
+    const checkResendExpiration = async () => {
+      if (!otpPopupOpen || !assistant_id || assistant_id.trim() === '') return;
+
+      try {
+        const response = await fetch('/api/auth/forgot-password/check-resend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: assistant_id.trim() })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.resend_expiration) {
+            const expiration = new Date(data.resend_expiration);
+            const now = new Date();
+            const secondsRemaining = Math.max(0, Math.floor((expiration - now) / 1000));
+            setResendCooldown(secondsRemaining);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check resend expiration:', error);
+      }
+    };
+
+    checkResendExpiration();
+  }, [otpPopupOpen, assistant_id]);
+
+  const handleForgotPassword = async () => {
+    if (!assistant_id || assistant_id.trim() === '') {
+      setForgotMsg('Please Enter username or ID first');
+      return;
+    }
+
+    // First, check if user exists and get resend_expiration status
+    try {
+      setIsSendingOtp(true);
+      setOtpError('');
+      setForgotMsg('');
+      
+      // Check user and resend expiration status
+      const checkResponse = await fetch('/api/auth/forgot-password/check-resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: assistant_id.trim() })
+      });
+      
+      const checkData = await checkResponse.json();
+      
+      if (!checkResponse.ok) {
+        if (checkResponse.status === 404) {
+          setForgotMsg('ACCOUNT_NOT_FOUND');
+        } else {
+          setForgotMsg(checkData.error || 'Failed to check user');
+        }
+        setIsSendingOtp(false);
+        return;
+      }
+
+      // Check if we can send OTP (only if resend_expiration is null or has passed)
+      const now = new Date();
+      let canSendOtp = true;
+      let secondsRemaining = 0;
+      
+      if (checkData.resend_expiration) {
+        const expiration = new Date(checkData.resend_expiration);
+        secondsRemaining = Math.max(0, Math.floor((expiration - now) / 1000));
+        // Only allow sending if expiration has passed
+        canSendOtp = expiration < now;
+      }
+      
+      // Set cooldown timer
+      setResendCooldown(secondsRemaining);
+      
+      // Open OTP popup
+      setOtpPopupOpen(true);
+      setOtp(['', '', '', '', '', '', '', '']);
+      setForgotMsg('');
+      
+      // Only send OTP if resend_expiration is null or has passed
+      if (canSendOtp) {
+        console.log('📤 Sending OTP request for ID:', assistant_id.trim());
+        
+        const response = await fetch('/api/auth/forgot-password/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: assistant_id.trim() })
+        });
+        
+        const data = await response.json();
+        
+        console.log('📥 OTP response:', { status: response.status, data });
+        
+        if (response.ok && data.success) {
+          // Update resend cooldown from response
+          if (data.resend_expiration) {
+            const expiration = new Date(data.resend_expiration);
+            const now = new Date();
+            const secondsRemaining = Math.max(0, Math.floor((expiration - now) / 1000));
+            setResendCooldown(secondsRemaining);
+          }
+        } else {
+          // Handle error - show generic message for email sending errors
+          console.error('❌ OTP send error:', data.error || data.details || 'Failed to send OTP');
+          if (data.resend_expiration) {
+            // Update cooldown even if email wasn't sent
+            const expiration = new Date(data.resend_expiration);
+            const now = new Date();
+            const secondsRemaining = Math.max(0, Math.floor((expiration - now) / 1000));
+            setResendCooldown(secondsRemaining);
+          }
+          setOtpError('Sorry, there was a problem sending the email. Please try again later.');
+        }
+      } else {
+        // Cooldown is still active, don't send OTP but show message
+        setOtpError("Please wait before requesting a new OTP.");
+      }
+    } catch (error) {
+      console.error('❌ OTP send exception:', error);
+      setOtpError('Sorry, there was a problem sending the email. Please try again later.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    // Only allow numbers, single character
+    const sanitized = value.replace(/[^0-9]/g, '').slice(0, 1);
+    const newOtp = [...otp];
+    newOtp[index] = sanitized;
+    setOtp(newOtp);
+    setOtpError('');
+  };
+
+  const handleOtpPaste = (e, index) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    const sanitized = pastedText.replace(/[^0-9]/g, '').slice(0, 8);
+    
+    if (sanitized.length === 8) {
+      // Fill all 8 inputs with the pasted code
+      const newOtp = sanitized.split('').slice(0, 8);
+      setOtp(newOtp);
+      setOtpError('');
+      
+      // Focus on the last input after pasting
+      setTimeout(() => {
+        const lastInput = document.querySelector(`input[name="otp-7"]`);
+        if (lastInput) lastInput.focus();
+      }, 0);
+    } else if (sanitized.length > 0) {
+      // If pasted text is less than 8 characters, fill from current index
+      const newOtp = [...otp];
+      for (let i = 0; i < sanitized.length && (index + i) < 8; i++) {
+        newOtp[index + i] = sanitized[i];
+      }
+      setOtp(newOtp);
+      setOtpError('');
+      
+      // Focus on the next empty input or last input
+      const nextIndex = Math.min(index + sanitized.length, 7);
+      setTimeout(() => {
+        const nextInput = document.querySelector(`input[name="otp-${nextIndex}"]`);
+        if (nextInput) nextInput.focus();
+      }, 0);
+    }
+  };
+
+  const handleOtpKeyDown = (e, index) => {
+    // Handle backspace to move to previous input
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.querySelector(`input[name="otp-${index - 1}"]`);
+      if (prevInput) prevInput.focus();
+    }
+    // Handle arrow keys
+    else if (e.key === 'ArrowLeft' && index > 0) {
+      const prevInput = document.querySelector(`input[name="otp-${index - 1}"]`);
+      if (prevInput) prevInput.focus();
+    } else if (e.key === 'ArrowRight' && index < 7) {
+      const nextInput = document.querySelector(`input[name="otp-${index + 1}"]`);
+      if (nextInput) nextInput.focus();
+    }
+    // Auto-advance to next input on character entry
+    else if (e.key !== 'Backspace' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && otp[index] && index < 7) {
+      const nextInput = document.querySelector(`input[name="otp-${index + 1}"]`);
+      if (nextInput) nextInput.focus();
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    
+    try {
+      setIsSendingOtp(true);
+      setOtpError('');
+      
+      const response = await fetch('/api/auth/forgot-password/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: assistant_id.trim() })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        // Set cooldown from database resend_expiration
+        if (data.resend_expiration) {
+          const expiration = new Date(data.resend_expiration);
+          const now = new Date();
+          const secondsRemaining = Math.max(0, Math.floor((expiration - now) / 1000));
+          setResendCooldown(secondsRemaining);
+        } else {
+          setResendCooldown(180); // 3 minutes = 180 seconds (fallback)
+        }
+        setOtpError('');
+      } else {
+        // Show generic message for email sending errors
+        setOtpError('Sorry, there was a problem sending the email. Please try again later.');
+      }
+    } catch (error) {
+      // Show generic message for email sending errors
+      setOtpError('Sorry, there was a problem sending the email. Please try again later.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const otpCode = otp.join('');
+    
+    if (otpCode.length !== 8) {
+      setOtpError('Please enter the complete OTP code');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError('');
+
+    try {
+      const response = await fetch('/api/auth/forgot-password/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: assistant_id.trim(),
+          otp: otpCode
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // OTP verified, redirect to forgot password page with HMAC signature
+        setOtpPopupOpen(false);
+        const sig = data.sig; // HMAC signature from server
+        router.push(`/forgot_password?id=${encodeURIComponent(assistant_id.trim())}&sig=${encodeURIComponent(sig)}`);
+      } else {
+        setOtpError(data.error || 'Invalid OTP');
+      }
+    } catch (error) {
+      setOtpError('Failed to verify OTP. Please try again.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setMessage("");
     setUsernameError("");
     setPasswordError("");
-    
-    // Trim whitespaces from username before sending to API
-    const trimmedAssistantId = assistant_id.trim();
-    
+
+    // Don't block login - let it proceed
+    // DevToolsProtection in _app.js will handle protection after login
+    // and will bypass for developers
+
+    // Trim whitespaces from username before sending
+    const trimmedUsername = assistant_id.trim();
+    // If it's a pure numeric ID, send it as a Number (e.g. 1, not "1")
+    const assistantIdForRequest = /^\d+$/.test(trimmedUsername)
+      ? Number(trimmedUsername)
+      : trimmedUsername;
+
     loginMutation.mutate(
-      { assistant_id: trimmedAssistantId, password },
+      { assistant_id: assistantIdForRequest, password },
       {
         onSuccess: (data) => {
+          // Set user role for devtools check
+          setUserRole(data.role);
+          
+          // Remove all sessionStorage items after successful login
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('student_id');
+            sessionStorage.removeItem('student_password');
+            sessionStorage.removeItem('forgot_password_username');
+            sessionStorage.removeItem('forgot_password_password');
+          }
+          
           // Check if there's a redirect path saved in cookies
           const cookies = document.cookie.split(';');
           const redirectCookie = cookies.find(cookie => cookie.trim().startsWith('redirectAfterLogin='));
           const redirectPath = redirectCookie ? redirectCookie.split('=')[1] : null;
           console.log("🔍 Redirect path found:", redirectPath);
           
+          // Determine redirect destination based on role
+          const userRole = data.role;
+          const defaultDashboard = userRole === 'student' ? '/student_dashboard' : '/dashboard';
+          
           // Small delay to ensure token is stored and auth state updates
           setTimeout(() => {
-            if (redirectPath && redirectPath !== "/" && redirectPath !== "/dashboard") {
+            if (redirectPath && redirectPath !== "/" && redirectPath !== "/dashboard" && redirectPath !== "/student_dashboard") {
               // Clear the redirect cookie and redirect to intended page
               document.cookie = "redirectAfterLogin=; path=/; max-age=0";
               console.log("🔄 Redirecting to:", redirectPath);
               // Use window.location for more reliable redirect
               window.location.href = redirectPath;
             } else {
-              // Default redirect to dashboard
-              console.log("🔄 Redirecting to dashboard");
-              window.location.href = "/dashboard";
+              // Default redirect based on role
+              console.log(`🔄 Redirecting to ${defaultDashboard} for role: ${userRole}`);
+              window.location.href = defaultDashboard;
             }
           }, 100);
         },
         onError: (err) => {
           if (err.response?.data?.error === 'user_not_found') {
-            setMessage("Wrong username and password");
+            // Check if the input is numeric (ID)
+            if (/^\d+$/.test(trimmedUsername)) {
+              setMessage("ACCOUNT_NOT_FOUND_SIGNUP"); // Special marker for numeric ID not found
+            } else {
+              setMessage("Wrong username, ID and password");
+            }
           } else if (err.response?.data?.error === 'wrong_password') {
             setPasswordError("Wrong password");
           } else if (err.response?.data?.error === 'account_deactivated') {
-            setMessage("Access unavailable: This account is deactivated. Please contact Mr. Ahmed Badr (admin) or Tony Joseph (developer).");
+            setMessage("Access unavailable: This account is deactivated. Please contact Tony Joseph (developer).");
+          } else if (err.response?.data?.error === 'student_account_deactivated') {
+            setMessage("student_account_deactivated"); // Special marker for custom rendering
           } else if (err.response?.data?.error === 'subscription_inactive' || err.response?.data?.error === 'subscription_expired') {
-            // Handle subscription errors with clickable developer link
-            const errorMessage = err.response?.data?.message || 'Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.';
-            setMessage(errorMessage);
+            setMessage(err.response?.data?.message || "Access unavailable: Subscription expired. Please contact Tony Joseph (developer) to renew.");
           } else {
-            setMessage("Wrong username and password");
+            setMessage("Wrong username, ID and password");
           }
         }
       }
@@ -178,7 +582,7 @@ export default function Login() {
             left: 0;
             right: 0;
             height: 4px;
-            background: linear-gradient(90deg, #87CEEB, #B0E0E6, #ADD8E6);
+            background: linear-gradient(90deg, #00101f, #465759, #ADD8E6);
             background-size: 200% 100%;
             animation: gradientShift 3s ease infinite;
           }
@@ -198,6 +602,7 @@ export default function Login() {
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
             object-fit: cover;
             background: transparent;
+
           }
           .title {
             font-size: 2.2rem;
@@ -331,23 +736,160 @@ export default function Login() {
               font-size: 1.1rem;
             }
           }
+          .vac-input {
+            width: 45px;
+            height: 55px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            border: 2px solid #87CEEB;
+            border-radius: 12px;
+            background: #ffffff;
+            color: #000000;
+            transition: all 0.3s ease;
+          }
+          .vac-input:focus {
+            outline: none;
+            border-color: #87CEEB;
+            box-shadow: 0 0 0 4px rgba(135, 206, 235, 0.1);
+          }
+          .vac-input.error-border {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1) !important;
+          }
+          
+          /* OTP Modal Responsive Styles */
+          :global(.otp-modal-content) {
+            max-width: 500px !important;
+            margin: 10px !important;
+          }
+          
+          :global(.otp-modal-body) {
+            padding: 24px !important;
+          }
+          
+          @media (max-width: 768px) {
+            :global(.otp-modal-content) {
+              max-width: 95% !important;
+              margin: 5px !important;
+            }
+            
+            :global(.otp-modal-body) {
+              padding: 20px !important;
+            }
+            
+            .vac-input {
+              width: 38px !important;
+              height: 48px !important;
+              font-size: 1.3rem !important;
+            }
+          }
+          
+          @media (max-width: 480px) {
+            :global(.otp-modal-content) {
+              max-width: 98% !important;
+              margin: 2px !important;
+            }
+            
+            :global(.otp-modal-body) {
+              padding: 16px !important;
+            }
+            
+            .otp-title {
+              font-size: 1.3rem !important;
+              margin-bottom: 6px !important;
+            }
+            
+            .otp-subtitle {
+              font-size: 0.85rem !important;
+            }
+            
+            .otp-inputs-container {
+              gap: 6px !important;
+              margin-bottom: 12px !important;
+            }
+            
+            .vac-input {
+              width: 35px !important;
+              height: 45px !important;
+              font-size: 1.2rem !important;
+            }
+            
+            .otp-buttons-container {
+              flex-direction: column !important;
+              gap: 10px !important;
+            }
+            
+            .otp-cancel-btn,
+            .otp-verify-btn {
+              width: 100% !important;
+              padding: 12px !important;
+              font-size: 0.95rem !important;
+            }
+            
+            .otp-resend-container {
+              margin-top: 12px !important;
+            }
+            
+            .otp-resend-btn {
+              width: 100% !important;
+              padding: 10px !important;
+              font-size: 0.85rem !important;
+            }
+          }
+          
+          @media (max-width: 768px) {
+            .otp-buttons-container {
+              gap: 10px !important;
+            }
+            
+            .otp-cancel-btn,
+            .otp-verify-btn {
+              padding: 11px 20px !important;
+              font-size: 0.95rem !important;
+            }
+            
+            .otp-resend-btn {
+              padding: 10px 18px !important;
+              font-size: 0.88rem !important;
+            }
+          }
         `}</style>
 
         <div className="login-container">
           <div className="logo-section">
-            <Image src="/logo.png" alt="Logo" width={120} height={120} className="logo-icon" priority />
-            <h1 className="title">Assistant Login</h1>
+            <Image src="/logo.png" alt="Logo" width={90} height={90} className="logo-icon" style={{ borderRadius: '50px' }} priority />
+            <h1 className="title">Application Login (Demo)</h1>
             <p className="subtitle">Welcome back! Please sign in to continue</p>
           </div>
 
         <form onSubmit={handleLogin} autoComplete="off">
             <div className="form-group" style={{ marginBottom: usernameError ? 4 : 38 }}>
               <FloatingLabelInput
-                label="Username"
+                label="Username, ID"
                 value={assistant_id}
-                onChange={e => setAssistantId(e.target.value)}
+                onChange={e => {
+                  // Remove spaces from username input
+                  const value = e.target.value.replace(/\s/g, '');
+                  setAssistantId(value);
+                  
+                  // Remove from sessionStorage if input is empty
+                  if (typeof window !== 'undefined') {
+                    if (value === '') {
+                      sessionStorage.removeItem('forgot_password_username');
+                    } else {
+                      sessionStorage.setItem('forgot_password_username', value);
+                    }
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Prevent space key from being entered
+                  if (e.key === ' ') {
+                    e.preventDefault();
+                  }
+                }}
                 error={usernameError || undefined}
-                autoComplete="username"
+                autoComplete="username, id"
                 type="text"
               />
             </div>
@@ -355,7 +897,19 @@ export default function Login() {
               <FloatingLabelInput
                 label="Password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={e => {
+                  const value = e.target.value;
+                  setPassword(value);
+                  
+                  // Remove from sessionStorage if password field is cleared
+                  if (typeof window !== 'undefined') {
+                    if (value === '') {
+                      sessionStorage.removeItem('forgot_password_password');
+                    } else {
+                      sessionStorage.setItem('forgot_password_password', value);
+                    }
+                  }
+                }}
                 error={passwordError || undefined}
                 autoComplete="current-password"
                 type="password"
@@ -363,10 +917,10 @@ export default function Login() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8 }}>
                 <a
                   href="#"
-                  style={{ color: '#1FA8DC', cursor: 'pointer', fontWeight: 500, textDecoration: 'underline', fontSize: '0.85rem' }}
+                  style={{ color: '#00101f', cursor: 'pointer', fontWeight: 500, textDecoration: 'underline', fontSize: '0.85rem' }}
                   onClick={e => { 
-                    e.preventDefault(); 
-                    setForgotMsg('Contact Mr Mina (admin) or Tony Joseph (developer)'); 
+                    e.preventDefault();
+                    handleForgotPassword();
                   }}
                 >
                   Forgot your password?
@@ -421,33 +975,90 @@ export default function Login() {
                 flexWrap: 'nowrap'
               }}>
                 <span style={{ fontSize: 20, flexShrink: 0 }}>❗</span> 
-                {forgotMsg ? (
+                {message === 'student_account_deactivated' ? (
                   <span>
-                    Contact Mr. Ahmed Badr (admin) or Tony Joseph (
-                      <a
-                        href="/contact_developer"
-                        style={{ 
-                          color: 'white', 
-                          textDecoration: 'underline', 
-                          fontWeight: 'bold',
-                          cursor: 'pointer'
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push('/contact_developer');
-                        }}
-                      >
-                        developer
-                      </a>
-                      )
-                    </span>
-                  ) : message && message.includes('(developer)') ? (
+                    Access unavailable: This account is deactivated. Please contact{' '}
+                    <a
+                      href="/contact_assistants"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        router.push('/contact_assistants');
+                      }}
+                      style={{
+                        color: 'white',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        fontWeight: 700
+                      }}
+                    >
+                      assistants
+                    </a>
+                    {' '}or{' '}
+                    <a
+                      href="/contact_developer"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        router.push('/contact_developer');
+                      }}
+                      style={{
+                        color: 'white',
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        fontWeight: 700
+                      }}
+                    >
+                      developer
+                    </a>
+                  </span>
+                ) : message === 'ACCOUNT_NOT_FOUND_SIGNUP' ? (
+                  <span>
+                    Account Not Found, Please{' '}
+                    <a
+                      href="/sign-up"
+                      style={{ 
+                        color: 'white', 
+                        textDecoration: 'underline', 
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        router.push('/sign-up');
+                      }}
+                    >
+                      Sign up
+                    </a>
+                  </span>
+                ) : forgotMsg === 'ACCOUNT_NOT_FOUND' ? (
+                  <span>
+                    Account Not Found, Please{' '}
+                    <a
+                      href="/sign-up"
+                      style={{ 
+                        color: 'white', 
+                        textDecoration: 'underline', 
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        router.push('/sign-up');
+                      }}
+                    >
+                      Sign up
+                    </a>
+                  </span>
+                ) : forgotMsg ? (
+                  <span>{forgotMsg}</span>
+                ) : message && message.includes('developer') ? (
                     <span>
                       {message.split('(developer)').map((part, index, array) => {
-                        if (index === array.length - 1) return part;
+                        if (index === array.length - 1) {
+                          return part;
+                        }
                         return (
                           <span key={index}>
-                            {part}
+                            {part}(
                             <a
                               href="/contact_developer"
                               style={{ 
@@ -461,32 +1072,13 @@ export default function Login() {
                                 router.push('/contact_developer');
                               }}
                             >
-                              (developer)
+                              developer
                             </a>
+                            )
                           </span>
                         );
                       })}
                     </span>
-                  ) : message && message.includes('developer') && !message.includes('(developer)') ? (
-                    <span>
-                      Sorry, this account is deactivated. Please contact Mr. Ahmed Badr (admin) or Tony Joseph (
-                        <a
-                          href="/contact_developer"
-                          style={{ 
-                            color: 'white', 
-                            textDecoration: 'underline', 
-                            fontWeight: 'bold',
-                            cursor: 'pointer'
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            router.push('/contact_developer');
-                          }}
-                        >
-                          developer
-                        </a>
-                        ).
-                      </span>
                   ) : (
                     message
                   )}
@@ -496,9 +1088,196 @@ export default function Login() {
             <button type="submit" className="login-btn" disabled={loginMutation.isPending} style={{ background: 'linear-gradient(90deg, #5F6DFE 0%, #6A82FB 100%)', fontWeight: 700, fontSize: '1.1rem', borderRadius: 12, marginTop: 10 }}>
               {loginMutation.isPending ? "Logging in..." : "Continue"}
             </button>
+            
+            <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.95rem', color: '#495057' }}>
+              Don't Have An Account?{' '}
+              <a
+                href="/sign-up"
+                onClick={(e) => {
+                  e.preventDefault();
+                  router.push('/sign-up');
+                }}
+                style={{
+                  color: '#007bff',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+              >
+                Sign Up
+              </a>
+            </div>
           </form>
 
         </div>
+
+        {/* OTP Popup Modal */}
+        <Modal
+          opened={otpPopupOpen}
+          onClose={() => {
+            setOtpPopupOpen(false);
+            setOtp(['', '', '', '', '', '', '', '']);
+            setOtpError('');
+          }}
+          title={null}
+          centered
+          radius="md"
+          size="md"
+          withCloseButton={false}
+          overlayProps={{ opacity: 0.9, blur: 4 }}
+          styles={{
+            content: {
+              background: '#ffffff',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+              border: '1px solid #e9ecef',
+              maxWidth: '500px',
+              margin: '10px',
+            },
+            header: {
+              display: 'none',
+            },
+            body: {
+              padding: '24px',
+            }
+          }}
+          classNames={{
+            content: 'otp-modal-content',
+            body: 'otp-modal-body'
+          }}
+        >
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <h2 className="otp-title" style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2c3e50', marginBottom: '8px' }}>
+              Enter OTP Code
+            </h2>
+            <p className="otp-subtitle" style={{ color: '#6c757d', fontSize: '0.95rem' }}>
+              We've sent an 8-digit code to your email
+            </p>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <div className="vac-inputs-container otp-inputs-container" style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: '8px',
+              marginBottom: '16px'
+            }}>
+              {otp.map((char, index) => (
+                <input
+                  key={index}
+                  name={`otp-${index}`}
+                  type="text"
+                  maxLength="1"
+                  value={char}
+                  onChange={(e) => handleOtpChange(index, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(e, index)}
+                  onPaste={(e) => handleOtpPaste(e, index)}
+                  className={otpError ? 'vac-input error-border' : 'vac-input'}
+                />
+              ))}
+            </div>
+            {otpError && (
+              <div style={{
+                color: '#dc3545',
+                fontSize: '0.9rem',
+                textAlign: 'center',
+                marginTop: '8px',
+                fontWeight: '500'
+              }}>
+                {otpError}
+              </div>
+            )}
+            <div className="otp-resend-container" style={{ textAlign: 'center', marginTop: '16px' }}>
+              <button
+                className="otp-resend-btn"
+                onClick={handleResendOtp}
+                disabled={isSendingOtp || resendCooldown > 0}
+                style={{
+                  background: resendCooldown > 0 ? 'linear-gradient(135deg, #6c757d 0%, #495057 100%)' : 'linear-gradient(135deg, #1FA8DC 0%, #17a2b8 100%)',
+                  border: 'none',
+                  color: 'white',
+                  cursor: (isSendingOtp || resendCooldown > 0) ? 'not-allowed' : 'pointer',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  padding: '10px 20px',
+                  boxShadow: resendCooldown > 0 ? '0 2px 8px rgba(108, 117, 125, 0.3)' : '0 4px 12px rgba(31, 168, 220, 0.3)',
+                  transition: 'all 0.3s ease',
+                  opacity: (isSendingOtp || resendCooldown > 0) ? 0.7 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSendingOtp && resendCooldown === 0) {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 6px 16px rgba(31, 168, 220, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSendingOtp && resendCooldown === 0) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(31, 168, 220, 0.3)';
+                  }
+                }}
+              >
+                {isSendingOtp 
+                  ? 'Sending...' 
+                  : resendCooldown > 0 
+                    ? `Resend OTP (${Math.floor(resendCooldown / 60)}:${String(resendCooldown % 60).padStart(2, '0')})`
+                    : 'Resend OTP'
+                }
+              </button>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            gap: '12px',
+            justifyContent: 'center'
+          }}>
+            <button
+              onClick={handleVerifyOtp}
+              disabled={isVerifyingOtp || otp.join('').length !== 8}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: (isVerifyingOtp || otp.join('').length !== 8) ? 'not-allowed' : 'pointer',
+                opacity: (isVerifyingOtp || otp.join('').length !== 8) ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {isVerifyingOtp ? 'Verifying...' : 'Verify'}
+            </button>
+            <button
+              onClick={() => {
+                setOtpPopupOpen(false);
+                setOtp(['', '', '', '', '', '', '', '']);
+                setOtpError('');
+              }}
+              disabled={isVerifyingOtp}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: isVerifyingOtp ? 'not-allowed' : 'pointer',
+                opacity: isVerifyingOtp ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <NeedHelp style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e9ecef' }} />
+        </Modal>
     </div>
   );
 }

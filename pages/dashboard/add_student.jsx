@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import BackToDashboard from "../../components/BackToDashboard";
 import CenterSelect from "../../components/CenterSelect";
-import GradeSelect from '../../components/CourseSelect';
-import CourseTypeSelect from '../../components/CourseTypeSelect';
+import GradeSelect from '../../components/GradeSelect';
 import AccountStateSelect from '../../components/AccountStateSelect';
 import Title from '../../components/Title';
 import { useCreateStudent } from '../../lib/api/students';
@@ -12,15 +11,13 @@ import { useCreateStudent } from '../../lib/api/students';
 export default function AddStudent() {
   const containerRef = useRef(null);
   const [form, setForm] = useState({
+    id: "",
     name: "",
+    age: "",
     grade: "",
-    courseType: "basics", // Default to basics
     school: "",
-    homeschooling: false,
     phone: "",
     parentsPhone: "",
-    parentsPhone2: "",
-    address: "",
     main_center: "",
     comment: "",
     account_state: "Activated", // Default to Activated
@@ -31,6 +28,9 @@ export default function AddStudent() {
   const [showQRButton, setShowQRButton] = useState(false);
   const [error, setError] = useState("");
   const [openDropdown, setOpenDropdown] = useState(null); // 'grade', 'center', or null
+  const [idError, setIdError] = useState("");
+  const [idChecking, setIdChecking] = useState(false);
+  const [idValid, setIdValid] = useState(false);
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(""), 5000);
@@ -75,14 +75,58 @@ export default function AddStudent() {
     };
   }, [openDropdown]);
 
+  // Debounced ID checking
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (form.id && form.id.trim() !== '') {
+        checkStudentId(form.id);
+      }
+    }, 500); // Check after 500ms of no typing
+
+    return () => clearTimeout(timer);
+  }, [form.id]);
+
   const router = useRouter();
   
   // React Query hook for creating students
   const createStudentMutation = useCreateStudent();
 
+  // Check if student ID is available
+  const checkStudentId = async (id) => {
+    if (!id || id.trim() === '') {
+      setIdError('');
+      setIdValid(false);
+      return;
+    }
+
+    setIdChecking(true);
+    setIdError('');
+
+    try {
+      const response = await fetch(`/api/students/${id}`);
+      if (response.ok) {
+        // Student exists with this ID
+        setIdError('This ID is used, please use another ID');
+        setIdValid(false);
+      } else if (response.status === 404) {
+        // Student doesn't exist, ID is available
+        setIdError('');
+        setIdValid(true);
+      } else {
+        setIdError('Error checking ID availability');
+        setIdValid(false);
+      }
+    } catch (error) {
+      setIdError('Error checking ID availability');
+      setIdValid(false);
+    } finally {
+      setIdChecking(false);
+    }
+  };
+
   const handleChange = (e) => {
     // Reset QR button if user starts entering new data (when form was previously empty)
-    if (showQRButton && !form.name && !form.grade && !form.school && !form.phone && !form.parentsPhone && !form.main_center) {
+    if (showQRButton && !form.name && !form.age && !form.grade && !form.school && !form.phone && !form.parentsPhone && !form.main_center) {
       setShowQRButton(false);
       setNewId("");
     }
@@ -93,6 +137,17 @@ export default function AddStudent() {
     e.preventDefault();
     setError("");
     setSuccess(false);
+    
+    // Validate custom ID
+    if (!form.id || form.id.trim() === '') {
+      setError("Student ID is required");
+      return;
+    }
+    
+    if (!idValid) {
+      setError("Please enter a valid, unused student ID");
+      return;
+    }
     
     // Validate phone numbers
     const studentPhone = form.phone;
@@ -109,39 +164,17 @@ export default function AddStudent() {
       return;
     }
     
-    // Validate parent phone 2
-    const parentPhone2 = form.parentsPhone2;
-    if (parentPhone2.length !== 11) {
-      setError("Parent's phone 2 number must be exactly 11 digits");
-      return;
-    }
-    
-    // Check if student phone number is the same as parent phone number 1
+    // Check if student phone number is the same as parent phone number
     if (studentPhone === parentPhone) {
-      setError("Student phone number cannot be the same as parent phone number 1");
-      return;
-    }
-    
-    // Check if student phone number is the same as parent phone number 2
-    if (studentPhone === parentPhone2) {
-      setError("Student phone number cannot be the same as parent phone number 2");
-      return;
-    }
-    
-    // Check if parent phone numbers are the same
-    if (parentPhone === parentPhone2) {
-      setError("Parent's phone numbers cannot be the same");
+      setError("Student phone number cannot be the same as parent phone number");
       return;
     }
     
     // Map parentsPhone to parents_phone for backend - preserve leading zeros by storing as strings
-    const payload = { ...form, parents_phone: parentPhone, parents_phone2: form.parentsPhone2 };
+    const payload = { ...form, parents_phone: parentPhone };
+    // Handle age - set to null if empty, otherwise convert to number
+    payload.age = form.age && form.age.trim() !== '' ? Number(form.age) : null;
     payload.phone = studentPhone; // Keep as string to preserve leading zeros exactly
-    
-    // Handle school field based on homeschooling checkbox
-    if (form.homeschooling) {
-      payload.school = "Homeschooling";
-    }
     let gradeClean = payload.grade.toLowerCase().replace(/\./g, '');
     payload.grade = gradeClean;
     // Optional main_comment: send as main_comment field
@@ -153,25 +186,9 @@ export default function AddStudent() {
     createStudentMutation.mutate(payload, {
       onSuccess: (data) => {
         setSuccess(true);
-        setSuccessMessage(`✅ Student added successfully! ID: ${data.id}`); // Use server-generated ID
-        setNewId(data.id); // Use server-generated ID
+        setSuccessMessage(`✅ Student added successfully! ID: ${form.id}`); // Use custom ID
+        setNewId(form.id); // Use custom ID
         setShowQRButton(true); // Show QR button after successful submission
-        
-        // Reset form fields after successful submission
-        setForm({
-          name: "",
-          grade: "",
-          courseType: "basics", // Reset to basics default
-          school: "",
-          homeschooling: false,
-          phone: "",
-          parentsPhone: "",
-          parentsPhone2: "",
-          address: "",
-          main_center: "",
-          comment: "",
-          account_state: "Activated", // Reset to default
-        });
       },
       onError: (err) => {
         setError(err.response?.data?.error || err.message);
@@ -191,6 +208,25 @@ export default function AddStudent() {
     }
   };
 
+  const handleAddAnotherStudent = () => {
+    setForm({
+      id: "",
+      name: "",
+      age: "",
+      grade: "",
+      school: "",
+      phone: "",
+      parentsPhone: "",
+      main_center: "",
+      comment: "",
+      account_state: "Activated", // Reset to default
+    });
+    setSuccess(false);
+    setSuccessMessage(""); // Clear success message
+    setNewId("");
+    setShowQRButton(false);
+    setError("");
+  };
 
   const goBack = () => {
     router.push("/dashboard");
@@ -313,6 +349,38 @@ export default function AddStudent() {
         <div className="form-container">
           <form onSubmit={handleSubmit}>
             <div className="form-group">
+              <label>Student ID <span style={{color: 'red'}}>*</span></label>
+              <input
+                className={`form-input ${idError ? 'error-border' : ''}`}
+                name="id"
+                placeholder="Enter student ID"
+                value={form.id}
+                onChange={handleChange}
+                required
+                autocomplete="off"
+              />
+              {/* ID availability feedback */}
+              {form.id && (
+                <div>
+                  {idChecking && (
+                    <div className="id-feedback checking">
+                      🔍 Checking availability...
+                    </div>
+                  )}
+                  {!idChecking && idError && (
+                    <div className="id-feedback taken">
+                      ❌ {idError}
+                    </div>
+                  )}
+                  {!idChecking && idValid && !idError && (
+                    <div className="id-feedback available">
+                      ✅ This ID is available
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="form-group">
               <label>Full Name <span style={{color: 'red'}}>*</span></label>
               <input
                 className="form-input"
@@ -325,7 +393,20 @@ export default function AddStudent() {
               />
             </div>
             <div className="form-group">
-              <label>Course <span style={{color: 'red'}}>*</span></label>
+              <label>Age (Optional)</label>
+              <input
+                className="form-input"
+                name="age"
+                type="number"
+                min="10"
+                max="30"
+                placeholder="Enter student's age (optional)"
+                value={form.age}
+                onChange={handleChange}
+              />
+            </div>
+            <div className="form-group">
+              <label>Grade <span style={{color: 'red'}}>*</span></label>
               <GradeSelect 
                 selectedGrade={form.grade} 
                 onGradeChange={(grade) => handleChange({ target: { name: 'grade', value: grade } })} 
@@ -336,44 +417,16 @@ export default function AddStudent() {
               />
             </div>
             <div className="form-group">
-              <label>Course Type <span style={{color: 'red'}}>*</span></label>
-              <CourseTypeSelect 
-                selectedCourseType={form.courseType} 
-                onCourseTypeChange={(courseType) => handleChange({ target: { name: 'courseType', value: courseType } })} 
-                required 
-                isOpen={openDropdown === 'courseType'}
-                onToggle={() => setOpenDropdown(openDropdown === 'courseType' ? null : 'courseType')}
-                onClose={() => setOpenDropdown(null)}
+              <label>School <span style={{color: 'red'}}>*</span></label>
+              <input
+                className="form-input"
+                name="school"
+                placeholder="Enter student's school"
+                value={form.school}
+                onChange={handleChange}
+                required
+                autocomplete="off"
               />
-            </div>
-            <div className="form-group">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                <label>School <span style={{color: 'red'}}>*</span></label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px', fontWeight: 'normal', color: '#666' }}>
-                  <input
-                    type="checkbox"
-                    name="homeschooling"
-                    checked={form.homeschooling}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      handleChange({ target: { name: 'homeschooling', value: isChecked } });
-                    }}
-                    style={{ margin: 0 }}
-                  />
-                  Homeschooling
-                </label>
-              </div>
-              {!form.homeschooling && (
-                <input
-                  className="form-input"
-                  name="school"
-                  placeholder="Enter student's school"
-                  value={form.school}
-                  onChange={handleChange}
-                  required
-                  autocomplete="off"
-                />
-              )}
             </div>
             <div className="form-group">
               <label>Phone <span style={{color: 'red'}}>*</span></label>
@@ -395,11 +448,11 @@ export default function AddStudent() {
                 autocomplete="off"
               />
               <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
-                Must be exactly 11 digits (e.g., 012345678901)
+                Must be exactly 11 digits (e.g., 01234567891)
               </small>
             </div>
             <div className="form-group">
-              <label>Parent's Phone 1 (Whatsapp) <span style={{color: 'red'}}>*</span></label>
+              <label>Parent's Phone (Whatsapp) <span style={{color: 'red'}}>*</span></label>
               <input
                 className="form-input"
                 name="parentsPhone"
@@ -418,43 +471,8 @@ export default function AddStudent() {
                 autocomplete="off"
               />
               <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
-                Must be exactly 11 digits (e.g., 01234567890)
+                Must be exactly 11 digits (e.g., 01234567891)
               </small>
-            </div>
-            <div className="form-group">
-              <label>Parent's Phone 2 <span style={{color: 'red'}}>*</span></label>
-              <input
-                className="form-input"
-                name="parentsPhone2"
-                type="tel"
-                pattern="[0-9]*"
-                inputMode="numeric"
-                placeholder="Enter second parent's phone number (11 digits)"
-                value={form.parentsPhone2}
-                maxLength={11}
-                onChange={(e) => {
-                  // Only allow numbers and limit to 11 digits
-                  const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
-                  handleChange({ target: { name: 'parentsPhone2', value } });
-                }}
-                required
-                autocomplete="off"
-              />
-              <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
-                Must be exactly 11 digits (e.g., 01234567890)
-              </small>
-            </div>
-            <div className="form-group">
-              <label>Address <span style={{color: 'red'}}>*</span></label>
-              <input
-                className="form-input"
-                name="address"
-                placeholder="Enter student's address"
-                value={form.address}
-                onChange={handleChange}
-                required
-                autocomplete="off"
-              />
             </div>
             <div className="form-group">
               <label>Main Center <span style={{color: 'red'}}>*</span></label>
@@ -473,7 +491,7 @@ export default function AddStudent() {
               required={true}
             />
           <div className="form-group">
-            <label>Hidden Comment (Optional)</label>
+            <label>Main Comment (Optional)</label>
             <textarea
               className="form-input"
               name="comment"
@@ -486,7 +504,7 @@ export default function AddStudent() {
           </div>
             <button 
               type="submit" 
-              disabled={createStudentMutation.isPending} 
+              disabled={createStudentMutation.isPending || idChecking || (idError && !idValid)} 
               className="submit-btn"
             >
               {createStudentMutation.isPending ? "Adding..." : "Add Student"}
@@ -529,6 +547,26 @@ export default function AddStudent() {
                 </button>
               </div>
             )}
+            <div style={{ marginTop: 12 }}>
+              <button 
+                className="submit-btn" 
+                onClick={handleAddAnotherStudent}
+                style={{
+                  background: 'linear-gradient(135deg, #17a2b8 0%, #20c997 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  padding: '14px 20px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 16px rgba(23, 162, 184, 0.3)',
+                  width: '100%'
+                }}
+              >
+                ➕ Add Another Student
+              </button>
+            </div>
           </div>
         )}
         

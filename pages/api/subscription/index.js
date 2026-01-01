@@ -31,8 +31,8 @@ function loadEnvConfig() {
 }
 
 const envConfig = loadEnvConfig();
-const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/mr-ahmad-badr';
-const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-ahmad-badr';
+const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
+const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-george-magdy';
 
 console.log('🔗 Using Mongo URI:', MONGO_URI);
 
@@ -119,14 +119,10 @@ export default async function handler(req, res) {
     } else if (req.method === 'PATCH') {
       // For PATCH requests, allow authenticated users to auto-expire subscription
       // This is used when the timer reaches 00:00:00:00
-      // Try to authenticate, but if it fails, still allow expiration (token might be invalid/expired)
-      let user = null;
       try {
-        user = await authMiddleware(req);
+        await authMiddleware(req); // Just verify authentication, not role
       } catch (error) {
-        // If authentication fails, we still proceed with expiration
-        // This handles cases where token is invalid but subscription should still expire
-        console.log('⚠️ Authentication failed for subscription expiration, proceeding anyway:', error.message);
+        return res.status(401).json({ error: 'Unauthorized' });
       }
       
       // Auto-expire subscription (set active to false and null all fields)
@@ -137,9 +133,7 @@ export default async function handler(req, res) {
         const expirationDate = new Date(subscription.date_of_expiration);
         
         // Only allow expiration if the expiration date has passed or is exactly now
-        // Add a small buffer (1 second) to account for timing differences between client and server
-        const timeDiff = expirationDate - now;
-        if (timeDiff <= 1000) { // Allow expiration if within 1 second
+        if (now >= expirationDate) {
           await db.collection('subscription').updateOne(
             {},
             {
@@ -155,9 +149,7 @@ export default async function handler(req, res) {
           );
           return res.json({ success: true, message: 'Subscription expired' });
         } else {
-          // Subscription hasn't expired yet - just return success
-          // This prevents 400 errors when client timer checks before actual expiration
-          return res.json({ success: true, message: 'Subscription expiration check completed', expired: false });
+          return res.status(400).json({ error: 'Subscription has not expired yet' });
         }
       }
       

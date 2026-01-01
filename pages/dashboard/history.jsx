@@ -1,18 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-// Removed weeks import - using lessons instead
+import { AVAILABLE_CENTERS } from "../../constants/centers";
+import { weeks } from "../../constants/weeks";
 import Title from "../../components/Title";
-import GradeSelect from "../../components/CourseSelect";
+import GradeSelect from "../../components/GradeSelect";
 import CenterSelect from "../../components/CenterSelect";
-import CourseTypeSelect from "../../components/CourseTypeSelect";
-import AttendanceWeekSelect from "../../components/AttendancelessonSelect";
+import AttendanceWeekSelect from "../../components/AttendanceWeekSelect";
 import { Table, ScrollArea } from '@mantine/core';
 import styles from '../../styles/TableScrollArea.module.css';
 import { IconArrowRight, IconSearch, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { ActionIcon, TextInput, useMantineTheme } from '@mantine/core';
 import { useStudentsHistory } from '../../lib/api/students';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
-import { lessons } from '../../constants/lessons';
 
 export function InputWithButton(props) {
   const theme = useMantineTheme();
@@ -40,10 +39,9 @@ export default function History() {
   const containerRef = useRef(null);
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedCenter, setSelectedCenter] = useState("");
-  const [selectedCourseType, setSelectedCourseType] = useState("");
   const [selectedWeek, setSelectedWeek] = useState("");
   const [filteredStudents, setFilteredStudents] = useState([]);
-  const [openDropdown, setOpenDropdown] = useState(null); // 'grade', 'center', 'courseType', 'week', or null
+  const [openDropdown, setOpenDropdown] = useState(null); // 'grade', 'center', 'week', or null
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50; // Display 50 records per page
@@ -53,7 +51,6 @@ export default function History() {
   useEffect(() => {
     const rememberedGrade = sessionStorage.getItem('historySelectedGrade');
     const rememberedCenter = sessionStorage.getItem('historySelectedCenter');
-    const rememberedCourseType = sessionStorage.getItem('historySelectedCourseType');
     const rememberedWeek = sessionStorage.getItem('historySelectedWeek');
     
     if (rememberedGrade) {
@@ -62,9 +59,6 @@ export default function History() {
     if (rememberedCenter) {
       setSelectedCenter(rememberedCenter);
     }
-    if (rememberedCourseType) {
-      setSelectedCourseType(rememberedCourseType);
-    }
     if (rememberedWeek) {
       setSelectedWeek(rememberedWeek);
     }
@@ -72,9 +66,9 @@ export default function History() {
 
   // React Query hook with real-time updates - 5 second polling
   const { data: students = [], isLoading, error, refetch, isRefetching, dataUpdatedAt } = useStudentsHistory({
-    // Aggressive real-time settings for immediate updates
-    refetchInterval: 5 * 1000, // Refetch every 5 seconds for real-time updates
-    refetchIntervalInBackground: true, // Continue when tab is not active
+    // Refetch settings
+    refetchInterval: 30 * 60 * 1000, // Refetch every 30 minutes
+    refetchIntervalInBackground: false, // Don't refetch when tab is not active
     refetchOnWindowFocus: true, // Immediate update when switching back to tab
     refetchOnReconnect: true, // Refetch when reconnecting to internet
     staleTime: 0, // Always consider data stale to force refetch
@@ -100,7 +94,7 @@ export default function History() {
 
   useEffect(() => {
     filterStudents();
-  }, [students, selectedGrade, selectedCenter, selectedCourseType, selectedWeek, searchTerm]);
+  }, [students, selectedGrade, selectedCenter, selectedWeek, searchTerm]);
 
   // Debug: Log when data changes to confirm real-time updates
   useEffect(() => {
@@ -193,59 +187,13 @@ export default function History() {
         );
       }
 
-      if (selectedCourseType) {
-        // Filter by current student course type, not the course type stored in history record
-        // This ensures that when a student's course type is edited, filtering works with the updated course type
-        if (student.courseType && student.courseType.toLowerCase() === selectedCourseType.toLowerCase()) {
-          // Keep all records for this student since their current course type matches the filter
-        } else {
-          // Filter out all records for this student since their current course type doesn't match
-          filteredRecords = [];
-        }
-      }
-
       if (selectedWeek && selectedWeek !== '') {
         filteredRecords = filteredRecords.filter(record => {
-          // Handle both lesson name format and week number format
-          const recordLesson = record.lesson || null;
-          const recordWeek = (record.week !== null && record.week !== undefined) ? record.week : null;
-          
-          // First, try to match by lesson name directly
-          if (recordLesson && typeof recordLesson === 'string') {
-            return recordLesson.toLowerCase() === selectedWeek.toLowerCase();
-          }
-          
-          // If record has week number, try to match it with the selected lesson
-          if (recordWeek !== null && recordWeek !== undefined) {
-            // Find the index of the selected lesson in the lessons array
-            const lessonIndex = lessons.findIndex(name => name.toLowerCase() === selectedWeek.toLowerCase());
-            
-            if (lessonIndex !== -1) {
-              // selectedWeek is a lesson name, convert to week number (1-indexed to match array index + 1)
-              const weekNumber = lessonIndex + 1;
-              // Compare both as numbers and strings to handle type differences
-              const recordWeekNum = typeof recordWeek === 'number' ? recordWeek : parseInt(recordWeek);
-              return !isNaN(recordWeekNum) && recordWeekNum === weekNumber;
-            }
-            
-            // Try legacy format "lesson X" if selectedWeek is in that format
-            const weekMatch = selectedWeek.match(/lesson\s*(\d+)/i);
-            if (weekMatch) {
-              const selectedWeekNumber = parseInt(weekMatch[1]);
-              const recordWeekNum = typeof recordWeek === 'number' ? recordWeek : parseInt(recordWeek);
-              return !isNaN(recordWeekNum) && recordWeekNum === selectedWeekNumber;
-            }
-            
-            // Try direct numeric comparison
-            const selectedWeekNum = parseInt(selectedWeek);
-            if (!isNaN(selectedWeekNum)) {
-              const recordWeekNum = typeof recordWeek === 'number' ? recordWeek : parseInt(recordWeek);
-              return !isNaN(recordWeekNum) && recordWeekNum === selectedWeekNum;
-            }
-          }
-          
-          // No match found
-          return false;
+          const recordWeek = record.week || 'n/a';
+          // Convert week string to number for comparison
+          const weekMatch = selectedWeek.match(/week (\d+)/);
+          const selectedWeekNumber = weekMatch ? parseInt(weekMatch[1]) : null;
+          return selectedWeekNumber && recordWeek === selectedWeekNumber;
         });
       }
 
@@ -296,7 +244,7 @@ export default function History() {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedGrade, selectedCenter, selectedCourseType, selectedWeek, searchTerm]);
+  }, [selectedGrade, selectedCenter, selectedWeek, searchTerm]);
 
   // Pagination handlers
   const handlePageClick = (pageNumber) => {
@@ -640,7 +588,7 @@ export default function History() {
         <div className="filters-container">
           <div className="filter-row">
             <div className="filter-group">
-              <label className="filter-label">Filter by Course</label>
+              <label className="filter-label">Filter by Grade</label>
               <GradeSelect
                 selectedGrade={selectedGrade}
                 onGradeChange={(grade) => {
@@ -654,24 +602,6 @@ export default function History() {
                 }}
                 isOpen={openDropdown === 'grade'}
                 onToggle={() => setOpenDropdown(openDropdown === 'grade' ? null : 'grade')}
-                onClose={() => setOpenDropdown(null)}
-              />
-            </div>
-            <div className="filter-group">
-              <label className="filter-label">Filter by Course Type</label>
-              <CourseTypeSelect
-                selectedCourseType={selectedCourseType}
-                onCourseTypeChange={(courseType) => {
-                  setSelectedCourseType(courseType);
-                  // Remember the selected course type
-                  if (courseType) {
-                    sessionStorage.setItem('historySelectedCourseType', courseType);
-                  } else {
-                    sessionStorage.removeItem('historySelectedCourseType');
-                  }
-                }}
-                isOpen={openDropdown === 'courseType'}
-                onToggle={() => setOpenDropdown(openDropdown === 'courseType' ? null : 'courseType')}
                 onClose={() => setOpenDropdown(null)}
               />
             </div>
@@ -694,7 +624,7 @@ export default function History() {
               />
             </div>
             <div className="filter-group">
-              <label className="filter-label">Filter by Lesson</label>
+              <label className="filter-label">Filter by Week</label>
               <AttendanceWeekSelect
                 selectedWeek={selectedWeek}
                 onWeekChange={(week) => {
@@ -729,73 +659,52 @@ export default function History() {
               textAlign: 'center',
               fontWeight: 600
             }}>
-              {error?.message || error?.toString() || 'An error occurred'}
+              {error}
             </div>
           )}
 
           {allHistoryRecords.length === 0 ? (
             <div className="no-results">
-              {selectedGrade || selectedCenter || selectedCourseType || selectedWeek 
+              {selectedGrade || selectedCenter || selectedWeek 
                 ? "No students found with the selected filters."
                 : "No attendance records found."
               }
             </div>
           ) : (
             <>
-              <ScrollArea h={400} type="hover" className={styles.scrolled}>
-                <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: '1500px' }}>
-                  <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
-                    <Table.Tr>
-                      <Table.Th style={{ width: '60px', minWidth: '60px', textAlign: 'center' }}>ID</Table.Th>
-                      <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Name</Table.Th>
-                      <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Course</Table.Th>
-                      <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Course Type</Table.Th>
-                      <Table.Th style={{ width: '180px', minWidth: '180px', textAlign: 'center' }}>School</Table.Th>
-                      <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Phone No.</Table.Th>
-                      <Table.Th style={{ width: '130px', minWidth: '130px', textAlign: 'center' }}>Parent No. 1</Table.Th>
-                      <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Lesson</Table.Th>
-                      <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Main Center</Table.Th>
-                      <Table.Th style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>Attendance Info</Table.Th>
-                      <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>HW Status</Table.Th>
-                      <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Quiz Degree</Table.Th>
-                      <Table.Th style={{ width: '160px', minWidth: '160px', textAlign: 'center' }}>Main Comment</Table.Th>
-                      <Table.Th style={{ width: '160px', minWidth: '160px', textAlign: 'center' }}>Lesson Comment</Table.Th>
-                      <Table.Th style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>Student Message State</Table.Th>
-                      <Table.Th style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>Parent Message State</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {paginatedRecords.map(({ student, record, key }) => {
-                      return (
-                        <Table.Tr key={key}>
-                          <Table.Td style={{ fontWeight: 'bold', color: '#1FA8DC', width: '60px', minWidth: '60px', textAlign: 'center' }}>{student.id}</Table.Td>
+            <ScrollArea h={400} type="hover" className={styles.scrolled}>
+              <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: '1400px' }}>
+                <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa' }}>
+                  <Table.Tr>
+                    <Table.Th style={{ width: '60px', minWidth: '60px', textAlign: 'center' }}>ID</Table.Th>
+                    <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Name</Table.Th>
+                    <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Grade</Table.Th>
+                    <Table.Th style={{ width: '180px', minWidth: '180px', textAlign: 'center' }}>School</Table.Th>
+                    <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Phone</Table.Th>
+                    <Table.Th style={{ width: '130px', minWidth: '130px', textAlign: 'center' }}>Parent Phone</Table.Th>
+                    <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Attendance Week</Table.Th>
+                    <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Main Center</Table.Th>
+                    <Table.Th style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>Attendance Info</Table.Th>
+                    <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>HW Status</Table.Th>
+                    <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Quiz Degree</Table.Th>
+                    <Table.Th style={{ width: '160px', minWidth: '160px', textAlign: 'center' }}>Main Comment</Table.Th>
+                    <Table.Th style={{ width: '160px', minWidth: '160px', textAlign: 'center' }}>Week Comment</Table.Th>
+                    <Table.Th style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>Message State</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                    {paginatedRecords.map(({ student, record, key }) => (
+                      <Table.Tr key={key}>
+                        <Table.Td style={{ fontWeight: 'bold', color: '#1FA8DC', width: '60px', minWidth: '60px', textAlign: 'center' }}>{student.id}</Table.Td>
                         <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>{student.name}</Table.Td>
                         <Table.Td style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>{student.grade || 'N/A'}</Table.Td>
-                        <Table.Td style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>{student.courseType || 'N/A'}</Table.Td>
                         <Table.Td style={{ width: '180px', minWidth: '180px', wordWrap: 'break-word', textAlign: 'center' }}>{student.school || 'N/A'}</Table.Td>
                         <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>{student.phone || 'N/A'}</Table.Td>
-                    <Table.Td style={{ width: '130px', minWidth: '130px', textAlign: 'center' }}>{
-                      (() => {
-                        // Prefer student-level fields, then record-level fallbacks
-                        const fromStudent = (student.parents_phone || student.parentsPhone1 || student.parentsPhone || student.parents_phone1);
-                        const fromRecord = (record.parents_phone || record.parentsPhone || record.parent_phone || record.parentPhone);
-                        return fromStudent || fromRecord || 'N/A';
-                      })()
-                    }</Table.Td>
+                        <Table.Td style={{ width: '130px', minWidth: '130px', textAlign: 'center' }}>{student.parentsPhone || 'N/A'}</Table.Td>
                         <Table.Td style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>
                           {(() => {
-                            // Handle both lesson names and week numbers for backward compatibility
-                            if (record.lesson && typeof record.lesson === 'string') {
-                              return record.lesson; // Already a lesson name
-                            } else {
-                              // Convert week number to lesson name using the lessons array
-                              const week = record.week || 1;
-                              const weekNum = typeof week === 'number' ? week : parseInt(week);
-                              if (!isNaN(weekNum) && weekNum > 0 && weekNum <= lessons.length) {
-                                return lessons[weekNum - 1] || `Lesson ${weekNum}`;
-                              }
-                              return `Lesson ${week}`;
-                            }
+                            const week = record.week || 1; // Default to week 1 if not present
+                            return `week ${String(week).padStart(2, '0')}`;
                           })()}
                         </Table.Td>
                         <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>{record.main_center || 'N/A'}</Table.Td>
@@ -813,36 +722,10 @@ export default function History() {
                                 fontWeight: 'bold'
                               }}>⚠️ Not Completed</span>;
                             } else if (record.hwDone === true) {
-                              // Show Done with degree if available
-                              let degree = '';
-                              try {
-                                // Prefer degree from the history record if present
-                                degree = (record.homework_degree ?? record.hwDegree ?? '').toString().trim();
-                                if (!degree) {
-                                  // Fallback: derive from student's lessons by lesson name or week index
-                                  if (record.lesson && typeof record.lesson === 'string') {
-                                    if (student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons)) {
-                                      degree = (student.lessons[record.lesson]?.homework_degree ?? '').toString().trim();
-                                    } else if (Array.isArray(student.lessons)) {
-                                      const lessonData = student.lessons.find(l => l && l.lesson === record.lesson);
-                                      degree = (lessonData?.homework_degree ?? '').toString().trim();
-                                    }
-                                  } else {
-                                    const weekIdx = ((record?.week ?? 0) - 1);
-                                    if (Array.isArray(student.lessons) && weekIdx >= 0) {
-                                      degree = (student.lessons[weekIdx]?.homework_degree ?? '').toString().trim();
-                                    } else if (Array.isArray(student.weeks) && weekIdx >= 0) {
-                                      degree = (student.weeks[weekIdx]?.homework_degree ?? '').toString().trim();
-                                    }
-                                  }
-                                }
-                              } catch {}
-                              const hasDegree = degree && degree !== '';
-                              return (
-                                <span style={{ color: '#28a745', fontWeight: 'bold' }}>
-                                  {hasDegree ? `✅ Done (${degree})` : '✅ Done'}
-                                </span>
-                              );
+                              return <span style={{ 
+                                color: '#28a745',
+                                fontWeight: 'bold'
+                              }}>✅ Done</span>;
                             } else {
                               return <span style={{ 
                                 color: '#dc3545',
@@ -876,142 +759,83 @@ export default function History() {
                         <Table.Td style={{ width: '160px', minWidth: '160px', textAlign: 'center' }}>
                           {(() => {
                             try {
-                              let lessonComment = '';
-                              
-                              // Handle new lesson name format
-                              if (record.lesson && typeof record.lesson === 'string') {
-                                if (student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons)) {
-                                  lessonComment = (student.lessons[record.lesson]?.comment ?? '').toString();
-                                } else if (student.lessons && Array.isArray(student.lessons)) {
-                                  const lessonData = student.lessons.find(l => l && l.lesson === record.lesson);
-                                  lessonComment = (lessonData?.comment ?? '').toString();
-                                }
-                              } else {
-                                // Handle old week number format
-                                const weekIndex = ((record?.week ?? 0) - 1);
-                                if (student.weeks && Array.isArray(student.weeks) && weekIndex >= 0) {
-                                  lessonComment = (student.weeks[weekIndex]?.comment ?? '').toString();
-                                } else if (student.lessons && Array.isArray(student.lessons) && weekIndex >= 0) {
-                                  lessonComment = (student.lessons[weekIndex]?.comment ?? '').toString();
-                                }
-                              }
-                              
-                              return lessonComment.trim() !== '' ? lessonComment : 'No Comment';
+                              const weekIndex = ((record?.week ?? 0) - 1);
+                              const weekComment = (Array.isArray(student.weeks) && weekIndex >= 0)
+                                ? (student.weeks[weekIndex]?.comment ?? '').toString()
+                                : '';
+                              return weekComment.trim() !== '' ? weekComment : 'No Comment';
                             } catch {
                               return 'No Comment';
                             }
                           })()}
                         </Table.Td>
-                        <Table.Td style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>
-                          {(() => {
-                            // Prefer explicit flags from the history record if present
-                            let sms;
-                            if (record.student_message_state === true || record.student_message_state === false) {
-                              sms = !!record.student_message_state;
-                            } else {
-                              try {
-                                if (record.lesson && typeof record.lesson === 'string') {
-                                  sms = !!(student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons) && student.lessons[record.lesson]?.student_message_state);
-                                } else {
-                                  const weekIdx = ((record?.week ?? 0) - 1);
-                                  if (Array.isArray(student.lessons) && weekIdx >= 0) {
-                                    sms = !!student.lessons[weekIdx]?.student_message_state;
-                                  }
-                                }
-                              } catch {}
-                            }
-                            return (
-                              <span style={{ color: sms ? '#28a745' : '#dc3545', fontWeight: 'bold' }}>
-                                {sms ? '✓ Sent' : '✗ Not Sent'}
-                              </span>
-                            );
-                          })()}
+                        <Table.Td style={{ width: '100px', minWidth: '100px', textAlign: 'center' }}>
+                          <span style={{ 
+                            color: record.message_state ? '#28a745' : '#dc3545',
+                            fontWeight: 'bold'
+                          }}>
+                            {record.message_state ? '✓ Sent' : '✗ Not Sent'}
+                          </span>
                         </Table.Td>
-                        <Table.Td style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>
-                          {(() => {
-                            // Prefer explicit flags from the history record if present
-                            let pms;
-                            if (record.parent_message_state === true || record.parent_message_state === false) {
-                              pms = !!record.parent_message_state;
-                            } else {
-                              try {
-                                if (record.lesson && typeof record.lesson === 'string') {
-                                  pms = !!(student.lessons && typeof student.lessons === 'object' && !Array.isArray(student.lessons) && student.lessons[record.lesson]?.parent_message_state);
-                                } else {
-                                  const weekIdx = ((record?.week ?? 0) - 1);
-                                  if (Array.isArray(student.lessons) && weekIdx >= 0) {
-                                    pms = !!student.lessons[weekIdx]?.parent_message_state;
-                                  }
-                                }
-                              } catch {}
-                            }
-                            return (
-                              <span style={{ color: pms ? '#28a745' : '#dc3545', fontWeight: 'bold' }}>
-                                {pms ? '✓ Sent' : '✗ Not Sent'}
-                              </span>
-                            );
-                          })()}
-                        </Table.Td>
-                        </Table.Tr>
-                      );
-                    })}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea>
-            
-            {/* Pagination Controls */}
-            {allHistoryRecords.length > 0 && (
-              <div className="pagination-container">
-                <button
-                  className="pagination-button"
-                  onClick={handlePrevPage}
-                  disabled={!pagination.hasPrevPage}
-                  aria-label="Previous page"
-                >
-                  <IconChevronLeft size={20} stroke={2} />
-                </button>
-                
-                <div 
-                  className={`pagination-page-info ${pagination.totalPages > 1 ? 'clickable' : ''}`}
-                  onClick={() => pagination.totalPages > 1 && setShowPagePopup(!showPagePopup)}
-                  style={{ position: 'relative', cursor: pagination.totalPages > 1 ? 'pointer' : 'default', zIndex: 9999 }}
-                >
-                  Page {pagination.currentPage} of {pagination.totalPages}
+                      </Table.Tr>
+                    ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+              
+              {/* Pagination Controls */}
+              {allHistoryRecords.length > 0 && (
+                <div className="pagination-container">
+                  <button
+                    className="pagination-button"
+                    onClick={handlePrevPage}
+                    disabled={!pagination.hasPrevPage}
+                    aria-label="Previous page"
+                  >
+                    <IconChevronLeft size={20} stroke={2} />
+                  </button>
                   
-                  {/* Page Number Popup */}
-                  {showPagePopup && pagination.totalPages > 1 && (
-                    <div className="page-popup" style={{ zIndex: 10000 }}>
-                      <div className="page-popup-content">
-                        <div className="page-popup-header">Select Page</div>
-                        <div className="page-popup-grid">
-                          {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(pageNum => (
-                            <button
-                              key={pageNum}
-                              className={`page-number-btn ${pageNum === pagination.currentPage ? 'active' : ''}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handlePageClick(pageNum);
-                              }}
-                            >
-                              {pageNum}
-                            </button>
-                          ))}
+                  <div 
+                    className={`pagination-page-info ${pagination.totalPages > 1 ? 'clickable' : ''}`}
+                    onClick={() => pagination.totalPages > 1 && setShowPagePopup(!showPagePopup)}
+                    style={{ position: 'relative', cursor: pagination.totalPages > 1 ? 'pointer' : 'default' }}
+                  >
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                    
+                    {/* Page Number Popup */}
+                    {showPagePopup && pagination.totalPages > 1 && (
+                      <div className="page-popup">
+                        <div className="page-popup-content">
+                          <div className="page-popup-header">Select Page</div>
+                          <div className="page-popup-grid">
+                            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(pageNum => (
+                              <button
+                                key={pageNum}
+                                className={`page-number-btn ${pageNum === pagination.currentPage ? 'active' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePageClick(pageNum);
+                                }}
+                              >
+                                {pageNum}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  
+                  <button
+                    className="pagination-button"
+                    onClick={handleNextPage}
+                    disabled={!pagination.hasNextPage}
+                    aria-label="Next page"
+                  >
+                    <IconChevronRight size={20} stroke={2} />
+                  </button>
                 </div>
-                
-                <button
-                  className="pagination-button"
-                  onClick={handleNextPage}
-                  disabled={!pagination.hasNextPage}
-                  aria-label="Next page"
-                >
-                  <IconChevronRight size={20} stroke={2} />
-                </button>
-              </div>
-            )}
+              )}
             </>
           )}
         </div>

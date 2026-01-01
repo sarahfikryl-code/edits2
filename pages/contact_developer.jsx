@@ -176,7 +176,7 @@ export default function ContactDeveloperPage() {
             }} className="loading-logo">
               <Image 
                 src="/logo.png" 
-                alt="Mr. George Magdy Logo" 
+                alt="Demo Attendance System Logo" 
                 width={100} 
                 height={100} 
                 style={{ objectFit: "cover" }} 
@@ -431,7 +431,7 @@ export default function ContactDeveloperPage() {
               border: 2px solid rgba(31, 168, 220, 0.2);
               border-radius: 16px;
               padding: 20px;
-              margin: 16px 0;
+              margin: 20px 0;
               transition: all 0.3s ease;
               position: relative;
               overflow: hidden;
@@ -520,7 +520,7 @@ export default function ContactDeveloperPage() {
               
               .contact-item {
                 padding: 16px;
-                margin: 12px 0;
+                margin: 20px 0;
               }
               
               .contact-icon {
@@ -545,7 +545,7 @@ export default function ContactDeveloperPage() {
               
               .contact-item {
                 padding: 14px;
-                margin: 10px 0;
+                margin: 20px 0;
               }
               
               .contact-icon {
@@ -709,7 +709,7 @@ export default function ContactDeveloperPage() {
               </h3>
               <div>
                 <a 
-                  href="https://wa.me/201211172756?text=Hello%20Tony,%20I%20need%20help%20in%20Mr.%20Ahmad%20Badr%20Attendance%20System" 
+                  href="https://wa.me/201211172756?text=Hello%20Tony,%20I%20need%20help%20in%20the%20Demo%20Attendance%20System" 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="contact-link"
@@ -757,7 +757,7 @@ export default function ContactDeveloperPage() {
             borderRadius: "16px",
             border: "1px solid rgba(31, 168, 220, 0.1)"
           }}>
-            💡 Feel free to contact me for any technical support, bug reports, feature requests, or urgent issues regarding the Mr. Ahmad Badr Attendance System. I'm here to help ensure the system runs smoothly for all users.
+            💡 Feel free to contact me for any technical support, bug reports, feature requests, or urgent issues regarding the Demo Attendance System. I'm here to help ensure the system runs smoothly for all users.
           </div>
 
           {/* Action Buttons */}

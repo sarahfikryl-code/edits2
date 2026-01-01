@@ -2,17 +2,18 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import CenterSelect from "../../components/CenterSelect";
 import BackToDashboard from "../../components/BackToDashboard";
-import GradeSelect from '../../components/CourseSelect';
-import CourseTypeSelect from '../../components/CourseTypeSelect';
+import GradeSelect from '../../components/GradeSelect';
 import AccountStateSelect from '../../components/AccountStateSelect';
 import Title from '../../components/Title';
 import { useStudents, useStudent, useUpdateStudent } from '../../lib/api/students';
 
-// Helper to normalize course values to match select options
+// Helper to normalize grade values to match select options
 function normalizeGrade(grade) {
   if (!grade) return "";
-  const g = String(grade).toUpperCase().trim();
-  if (["EST", "SAT", "ACT"].includes(g)) return g;
+  const g = grade.toLowerCase().replace(/\s+/g, "");
+  if (g === "1stsecondary" || g === "1stsec") return "1st Secondary";
+  if (g === "2ndsecondary" || g === "2ndsec") return "2nd Secondary";
+  if (g === "3rdsecondary" || g === "3rdsec") return "3rd Secondary";
   return "";
 }
 
@@ -56,22 +57,17 @@ export default function EditStudent() {
   // Set original student and form data when student data loads
   useEffect(() => {
     if (student && !originalStudent) {
-      console.log('🔍 Student data received from API:', student);
       const studentData = {
         name: student.name,
         grade: normalizeGrade(student.grade),
-        courseType: student.courseType || "",
         phone: student.phone,
-        parents_phone: (student.parentsPhone1 || student.parents_phone || ''), // Support both old and new
-        parents_phone2: (student.parentsPhone2 || student.parents_phone2 || ''),
-        address: (student.address || ''),
+        parents_phone: student.parents_phone,
         main_center: student.main_center,
         school: student.school || "",
-        homeschooling: (student.school === "Homeschooling"),
+        age: student.age || "",
         comment: student.main_comment || student.comment || "",
         account_state: student.account_state || "Activated"
       };
-      console.log('📝 Form data being set:', studentData);
       setOriginalStudent({ ...studentData });
       setFormData({ ...studentData }); // Also set the form data
     }
@@ -121,56 +117,35 @@ export default function EditStudent() {
     setShowSearchResults(false);
     
     const searchTerm = studentId.trim();
-    const isAllDigits = /^\d+$/.test(searchTerm);
-    const isFullPhone = /^\d{11}$/.test(searchTerm);
-    if (isFullPhone) { 
+    
+    // Check if it's a numeric ID
+    if (/^\d+$/.test(searchTerm)) {
+      // It's a numeric ID, search directly
+      setSearchId(searchTerm);
+    } else {
+      // It's a name, search through all students (case-insensitive, includes)
       if (allStudents) {
-        const matchingStudents = allStudents.filter(s =>
-          s.phone === searchTerm || s.parentsPhone1 === searchTerm || s.parentsPhone === searchTerm
+        const matchingStudents = allStudents.filter(student => 
+          student.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
+        
         if (matchingStudents.length === 1) {
-          setSearchId(matchingStudents[0].id.toString());
-          setStudentId(matchingStudents[0].id.toString()); // Auto-replace with ID
+          // Single match, use it directly
+          const foundStudent = matchingStudents[0];
+          setSearchId(foundStudent.id.toString());
+          setStudentId(foundStudent.id.toString());
+        } else if (matchingStudents.length > 1) {
+          // Multiple matches, show selection
+          setSearchResults(matchingStudents);
+          setShowSearchResults(true);
+          setError(`Found ${matchingStudents.length} students. Please select one.`);
         } else {
-          setSearchId(searchTerm);
+          setError(`No student found with name starting with "${searchTerm}"`);
+          setSearchId("");
         }
       } else {
-        setSearchId(searchTerm);
+        setError("Student data not loaded. Please try again.");
       }
-      return; 
-    }
-    if (isAllDigits) {
-      if (allStudents) {
-        const byId = allStudents.find(s => String(s.id) === searchTerm);
-        if (byId) { setSearchId(String(byId.id)); setStudentId(String(byId.id)); return; }
-        const matches = allStudents.filter(s => {
-          const sp = String(s.phone||'').replace(/[^0-9]/g,'');
-          const pp = String(s.parents_phone||s.parentsPhone||'').replace(/[^0-9]/g,'');
-          return sp.startsWith(searchTerm) || pp.startsWith(searchTerm);
-        });
-        if (matches.length === 1) { const f = matches[0]; setSearchId(String(f.id)); setStudentId(String(f.id)); return; }
-        if (matches.length > 1) { setSearchResults(matches); setShowSearchResults(true); setError(`Found ${matches.length} students. Please select one.`); return; }
-      }
-      setSearchId(searchTerm); return;
-    }
-    if (allStudents) {
-      const matchingStudents = allStudents.filter(student => 
-        student.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      if (matchingStudents.length === 1) {
-        const foundStudent = matchingStudents[0];
-        setSearchId(foundStudent.id.toString());
-        setStudentId(foundStudent.id.toString());
-      } else if (matchingStudents.length > 1) {
-        setSearchResults(matchingStudents);
-        setShowSearchResults(true);
-        setError(`Found ${matchingStudents.length} students. Please select one.`);
-      } else {
-        setError(`No student found matching "${searchTerm}"`);
-        setSearchId("");
-      }
-    } else {
-      setError("Student data not loaded. Please try again.");
     }
   };
 
@@ -198,19 +173,8 @@ export default function EditStudent() {
     setError("");
   };
 
-  // After successful fetch, replace search input with numeric ID
-  useEffect(() => {
-    if (student && student.id != null) {
-      const fetchedId = String(student.id);
-      if (studentId !== fetchedId) {
-        setStudentId(fetchedId);
-      }
-    }
-  }, [student]);
-
   const handleChange = (e) => {
-    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setFormData({ ...formData, [e.target.name]: value });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   // Helper function to get only changed fields
@@ -221,6 +185,13 @@ export default function EditStudent() {
     Object.keys(formData).forEach(key => {
       // Special handling: allow clearing comment (empty string) -> send as null
       if (key === 'comment') {
+        if (formData[key] !== originalStudent[key]) {
+          changes[key] = formData[key];
+        }
+        return;
+      }
+      // Special handling: allow clearing age (empty string) -> send as null
+      if (key === 'age') {
         if (formData[key] !== originalStudent[key]) {
           changes[key] = formData[key];
         }
@@ -276,35 +247,12 @@ export default function EditStudent() {
       changedFields.parents_phone = parentPhone; // Keep as string to preserve leading zeros exactly
     }
     
-    if (changedFields.parents_phone2) {
-      const parentPhone2 = changedFields.parents_phone2.toString();
-      if (parentPhone2.length !== 11) {
-        setError("Parent's phone 2 number must be exactly 11 digits");
-        return;
-      }
-      changedFields.parents_phone2 = parentPhone2; // Keep as string to preserve leading zeros exactly
-    }
-    
-    // Check if student phone number is the same as parent phone numbers
+    // Check if student phone number is the same as parent phone number
     const currentStudentPhone = changedFields.phone || originalStudent.phone;
     const currentParentPhone = changedFields.parents_phone || originalStudent.parents_phone;
-    const currentParentPhone2 = changedFields.parents_phone2 || originalStudent.parents_phone2;
     
-    // Check if student phone number is the same as parent phone number 1
     if (currentStudentPhone === currentParentPhone) {
-      setError("Student phone number cannot be the same as parent phone number 1");
-      return;
-    }
-    
-    // Check if student phone number is the same as parent phone number 2
-    if (currentStudentPhone === currentParentPhone2) {
-      setError("Student phone number cannot be the same as parent phone number 2");
-      return;
-    }
-    
-    // Check if parent phone numbers are the same
-    if (currentParentPhone === currentParentPhone2) {
-      setError("Parent's phone numbers cannot be the same");
+      setError("Student phone number cannot be the same as parent phone number");
       return;
     }
     
@@ -320,20 +268,19 @@ export default function EditStudent() {
     if (changedFields.grade) {
       updatedStudent.grade = changedFields.grade.toLowerCase().replace(/\./g, '');
     }
+    if (Object.prototype.hasOwnProperty.call(changedFields, 'age')) {
+      // Handle empty string or null age - set to null in database
+      if (changedFields.age === '' || changedFields.age === null || changedFields.age === undefined) {
+        updatedStudent.age = null;
+      } else {
+        updatedStudent.age = Number(changedFields.age);
+      }
+    }
     // Normalize comment: empty string -> null, trim non-empty
     if (Object.prototype.hasOwnProperty.call(changedFields, 'comment')) {
       const c = changedFields.comment;
       updatedStudent.main_comment = (typeof c === 'string' && c.trim() === '') ? null : (typeof c === 'string' ? c.trim() : c);
       delete updatedStudent.comment;
-    }
-    
-    // Handle school field based on homeschooling checkbox
-    if (Object.prototype.hasOwnProperty.call(changedFields, 'homeschooling')) {
-      if (changedFields.homeschooling) {
-        updatedStudent.school = "Homeschooling";
-      }
-      // Remove homeschooling field from payload since we don't store it in DB
-      delete updatedStudent.homeschooling;
     }
     
     console.log('🚀 Final payload being sent:', updatedStudent);
@@ -625,7 +572,7 @@ export default function EditStudent() {
           <input
             className="fetch-input"
             type="text"
-            placeholder="Enter Student ID, Name, Phone Number"
+            placeholder="Enter student ID or Name"
             value={studentId}
             onChange={handleIdChange}
           />
@@ -712,9 +659,22 @@ export default function EditStudent() {
                 autocomplete="off"
               />
             </div>
+            <div className="form-group">
+              <label>Age</label>
+              <input
+                className="form-input"
+                name="age"
+                type="number"
+                min="10"
+                max="30"
+                placeholder="Enter student's age"
+                value={formData.age || ''}
+                onChange={handleChange}
+              />
+            </div>
             <div className="form-row">
               <div className="form-group">
-              <label>Course</label>
+                <label>Grade</label>
                 <GradeSelect 
                   selectedGrade={formData.grade || ''} 
                   onGradeChange={(grade) => handleChange({ target: { name: 'grade', value: grade } })} 
@@ -724,52 +684,15 @@ export default function EditStudent() {
                 />
               </div>
               <div className="form-group">
-                <label>Course Type</label>
-                <CourseTypeSelect 
-                  selectedCourseType={formData.courseType || ''} 
-                  onCourseTypeChange={(courseType) => handleChange({ target: { name: 'courseType', value: courseType } })} 
-                  isOpen={openDropdown === 'courseType'}
-                  onToggle={() => setOpenDropdown(openDropdown === 'courseType' ? null : 'courseType')}
-                  onClose={() => setOpenDropdown(null)}
+                <label>School</label>
+                <input
+                  className="form-input"
+                  name="school"
+                  placeholder="Enter student's school"
+                  value={formData.school || ''}
+                  onChange={handleChange}
+                  autocomplete="off"
                 />
-              </div>
-              <div className="form-group">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <label>School</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px', fontWeight: 'normal', color: '#666' }}>
-                    <input
-                      type="checkbox"
-                      name="homeschooling"
-                      checked={formData.homeschooling || false}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked;
-                        console.log('🏠 Homeschooling checkbox clicked:', isChecked);
-                        // Update both homeschooling and school fields in one state update
-                        setFormData(prev => {
-                          const newData = {
-                            ...prev,
-                            homeschooling: isChecked,
-                            school: isChecked ? prev.school : '' // Clear school when unchecking
-                          };
-                          console.log('📝 New form data:', newData);
-                          return newData;
-                        });
-                      }}
-                      style={{ margin: 0 }}
-                    />
-                    Homeschooling
-                  </label>
-                </div>
-                {!formData.homeschooling && (
-                  <input
-                    className="form-input"
-                    name="school"
-                    placeholder="Enter student's school"
-                    value={formData.school || ''}
-                    onChange={handleChange}
-                    autocomplete="off"
-                  />
-                )}
               </div>
             </div>
             <div className="form-row">
@@ -792,11 +715,11 @@ export default function EditStudent() {
                   autocomplete="off"
                 />
                 <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
-                  Must be exactly 11 digits (e.g., 12345678901)
+                  Must be exactly 11 digits (e.g., 01234567891)
                 </small>
               </div>
               <div className="form-group">
-                <label>Parent's Phone 1 (Whatsapp)</label>
+                <label>Parent's Phone (Whatsapp)</label>
                 <input
                   className="form-input"
                   name="parents_phone"
@@ -815,44 +738,9 @@ export default function EditStudent() {
                   autocomplete="off"
                 />
                 <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
-                  Must be exactly 11 digits (e.g., 12345678901)
+                  Must be exactly 11 digits (e.g., 01234567891)
                 </small>
               </div>
-            </div>
-            <div className="form-group">
-              <label>Parent's Phone 2 <span style={{color: 'red'}}>*</span></label>
-              <input
-                className="form-input"
-                name="parents_phone2"
-                type="tel"
-                pattern="[0-9]*"
-                inputMode="numeric"
-                placeholder="Enter second parent's phone number (11 digits)"
-                value={formData.parents_phone2 || ''}
-                maxLength={11}
-                onChange={(e) => {
-                  // Only allow numbers and limit to 11 digits
-                  const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
-                  handleChange({ target: { name: 'parents_phone2', value } });
-                }}
-                required
-                autocomplete="off"
-              />
-              <small style={{ color: '#6c757d', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
-                Must be exactly 11 digits (e.g., 12345678901)
-              </small>
-            </div>
-            <div className="form-group">
-              <label>Address <span style={{color: 'red'}}>*</span></label>
-              <input
-                className="form-input"
-                name="address"
-                placeholder="Enter student's address"
-                value={formData.address || ''}
-                onChange={handleChange}
-                required
-                autocomplete="off"
-              />
             </div>
             <div className="form-group" style={{ width: '100%' }}>
               <label>Main Center</label>
@@ -871,7 +759,7 @@ export default function EditStudent() {
               required={false}
             />
             <div className="form-group">
-              <label>Hidden Comment</label>
+              <label>Main Comment</label>
               <textarea
                 className="form-input"
                 name="comment"

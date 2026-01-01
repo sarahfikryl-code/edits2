@@ -1,28 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import Title from "../../components/Title";
-import ChartTabs from "../../components/ChartTabs";
 import { Table, ScrollArea, Modal } from '@mantine/core';
-// Removed weeks import - using lessons instead
+import { weeks } from "../../constants/weeks";
 import styles from '../../styles/TableScrollArea.module.css';
-import { useStudents, useStudent, useStudentPublic } from '../../lib/api/students';
-import dynamic from 'next/dynamic';
+import { useStudents, useStudent } from '../../lib/api/students';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
-import { lessons } from '../../constants/lessons';
-import { verifySignature } from '../../lib/hmac';
-
-// Helper function to check if user has token by making API call
-const hasToken = async () => {
-  if (typeof window === 'undefined') return false;
-  try {
-    const response = await fetch('/api/auth/me', {
-      credentials: 'include'
-    });
-    return response.ok;
-  } catch (error) {
-    return false;
-  }
-};
+import { useQuery } from '@tanstack/react-query';
+import apiClient from '../../lib/axios';
+import Image from 'next/image';
 
 export default function StudentInfo() {
   const containerRef = useRef(null);
@@ -32,162 +18,93 @@ export default function StudentInfo() {
   const [studentDeleted, setStudentDeleted] = useState(false);
   const [searchResults, setSearchResults] = useState([]); // Store multiple search results
   const [showSearchResults, setShowSearchResults] = useState(false); // Show/hide search results
-  const [isValidSignature, setIsValidSignature] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasAuthToken, setHasAuthToken] = useState(null);
   const router = useRouter();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsType, setDetailsType] = useState('absent');
   const [detailsWeeks, setDetailsWeeks] = useState([]);
   const [detailsTitle, setDetailsTitle] = useState('');
 
-  // Get all students for name-based search with real-time updates (only if authenticated)
-  const { data: allStudents } = useStudents({}, { 
-    enabled: !!hasAuthToken,
-    // Real-time settings for live updates
-    refetchInterval: 5 * 1000, // Refetch every 5 seconds for real-time updates
-    refetchIntervalInBackground: true, // Continue when tab is not active
-    refetchOnWindowFocus: true, // Immediate update when switching back to tab
-    refetchOnReconnect: true, // Refetch when reconnecting to internet
-    staleTime: 0, // Always consider data stale to force refetch
-    gcTime: 2000, // Keep in cache for 2 seconds
-    refetchOnMount: true, // Always refetch when component mounts/page entered
-  });
+  // Get all students for name-based search
+  const { data: allStudents } = useStudents();
   
-  // React Query hook with real-time updates
+  // React Query hook with real-time updates - 5 second polling
   const { data: student, isLoading: studentLoading, error: studentError, refetch: refetchStudent, isRefetching, dataUpdatedAt } = useStudent(searchId, { 
-    enabled: !!searchId && !!hasAuthToken,
-    // Real-time settings for live updates
-    refetchInterval: 3 * 1000, // Refetch every 3 seconds for real-time updates
-    refetchIntervalInBackground: true, // Continue when tab is not active
+    enabled: !!searchId,
+    // Refetch settings
+    refetchInterval: 30 * 60 * 1000, // Refetch every 30 minutes
+    refetchIntervalInBackground: false, // Don't refetch when tab is not active
     refetchOnWindowFocus: true, // Immediate update when switching back to tab
     refetchOnReconnect: true, // Refetch when reconnecting to internet
     staleTime: 0, // Always consider data stale to force refetch
-    gcTime: 1000, // Keep in cache for 1 second
+    gcTime: 1000, // Keep in cache for only 1 second
     refetchOnMount: true, // Always refetch when component mounts/page entered
-    retry: 2, // Retry twice for better reliability
-    retryDelay: 1000, // 1 second retry delay
   });
 
-  // Public student hook for HMAC access with real-time updates
-  const { data: publicStudent, isLoading: publicStudentLoading, error: publicStudentError, refetch: refetchPublicStudent } = useStudentPublic(studentId, router.query.sig, { 
-    enabled: !!studentId && !!isValidSignature && !!router.query.sig && !hasAuthToken,
-    // Real-time settings for live updates
-    refetchInterval: 3 * 1000, // Refetch every 3 seconds for real-time updates
-    refetchIntervalInBackground: true, // Continue when tab is not active
-    refetchOnWindowFocus: true, // Immediate update when switching back to tab
-    refetchOnReconnect: true, // Refetch when reconnecting to internet
-    staleTime: 0, // Always consider data stale to force refetch
-    gcTime: 1000, // Keep in cache for 1 second
-    refetchOnMount: true, // Always refetch when component mounts/page entered
-    retry: 2, // Retry twice for better reliability
-    retryDelay: 1000, // 1 second retry delay
-  });
-
-  // Determine which student data to use
-  const currentStudent = hasAuthToken ? student : publicStudent;
-  const currentStudentLoading = hasAuthToken ? studentLoading : publicStudentLoading;
-  const currentStudentError = hasAuthToken ? studentError : publicStudentError;
-
-  // Check authentication status
-  useEffect(() => {
-    const checkAuth = async () => {
-      const isAuthenticated = await hasToken();
-      setHasAuthToken(isAuthenticated);
-    };
-    checkAuth();
-  }, []);
-
-  // Handle URL parameters and HMAC verification
-  useEffect(() => {
-    if (!router.isReady || hasAuthToken === null) {
-      return;
-    }
-    
-    const { id, sig } = router.query;
-    
-        // Reset states quickly
-        setIsLoading(false);
-        setIsValidSignature(false);
-        setStudentId("");
-    
-    // Check if signature is provided in URL - verify it regardless of token status
-    if (sig) {
-      const studentIdFromUrl = String(id || '').trim();
-      const signature = String(sig).trim();
-      
-          // Validate parameters are not empty
-          if (!studentIdFromUrl || !signature) {
-            console.log('❌ Empty URL parameters with signature');
-            router.push('/student_not_found');
-            return;
-          }
-      
-      console.log('🔍 Verifying HMAC signature:', { studentIdFromUrl, signature, hasToken: hasAuthToken });
-      
+  // Get student profile picture
+  const { data: profilePictureData, error: profilePictureError } = useQuery({
+    queryKey: ['student-profile-picture', searchId],
+    queryFn: async () => {
+      if (!searchId) return { url: null };
       try {
-        // Verify the signature
-        const isValid = verifySignature(studentIdFromUrl, signature);
-        
-            if (isValid) {
-              console.log('✅ HMAC signature is valid');
-              setStudentId(studentIdFromUrl);
-              setIsValidSignature(true);
-              
-              // If user has token, also set searchId to fetch via authenticated API
-              if (hasAuthToken) {
-                setSearchId(studentIdFromUrl);
-              }
-            } else {
-              console.log('❌ HMAC signature is invalid');
-              setIsValidSignature(false);
-              router.push('/student_not_found');
-            }
-      } catch (error) {
-        console.error('❌ Error verifying signature:', error);
-        setIsValidSignature(false);
-        router.push('/student_not_found');
+        const response = await apiClient.get(`/api/profile-picture/student/${searchId}`);
+        console.log('📸 Profile picture API response:', response.data);
+        return response.data;
+      } catch (err) {
+        console.error('❌ Profile picture API error:', err);
+        return { url: null };
       }
-      return;
-    }
-    
-    // No signature in URL - handle based on token status
-    if (hasAuthToken) {
-      // If authenticated and have ID, put it in search bar
-      if (id) {
-        setStudentId(String(id));
-        setSearchId(String(id));
+    },
+    enabled: !!searchId,
+    staleTime: 50 * 60 * 1000, // 50 minutes
+    retry: 1,
+  });
+
+  const profilePictureUrl = profilePictureData?.url || null;
+
+  // Get user email from users collection
+  const { data: userEmailData } = useQuery({
+    queryKey: ['user-email', searchId],
+    queryFn: async () => {
+      if (!searchId) return { email: null };
+      try {
+        const response = await apiClient.get(`/api/users/${searchId}/email`);
+        return response.data;
+      } catch (err) {
+        console.error('❌ User email API error:', err);
+        return { email: null };
       }
-      return;
+    },
+    enabled: !!searchId,
+    staleTime: 50 * 60 * 1000, // 50 minutes
+    retry: 1,
+  });
+
+  const userEmail = userEmailData?.email || null;
+  
+  // Debug logging
+  useEffect(() => {
+    if (searchId) {
+      console.log('🖼️ Profile picture state:', {
+        searchId,
+        profilePictureData,
+        profilePictureUrl,
+        error: profilePictureError
+      });
     }
-    
-    // No token and no signature - redirect to login
-    console.log('❌ No authentication token and no signature');
-    router.push('/');
-  }, [router.isReady, router.query.id, router.query.sig, router, hasAuthToken]);
+  }, [searchId, profilePictureData, profilePictureUrl, profilePictureError]);
 
   // Debug logging for React Query status
   useEffect(() => {
-    if (currentStudent && (searchId || studentId)) {
+    if (student && searchId) {
       console.log('🔄 Student Info Page - Data Status:', {
-        studentId: searchId || studentId,
-        studentName: currentStudent.name,
+        studentId: searchId,
+        studentName: student.name,
         isRefetching,
         dataUpdatedAt: new Date(dataUpdatedAt).toLocaleTimeString(),
-        attendanceStatus: currentStudent.weeks?.[0]?.attended || false
-      });
-      
-      // Debug student data structure
-      console.log('📊 Student Data Structure:', {
-        grade: currentStudent.grade,
-        course: currentStudent.course,
-        parents_phone: currentStudent.parents_phone,
-        parentsPhone: currentStudent.parentsPhone,
-        parentsPhone1: currentStudent.parentsPhone1,
-        allFields: Object.keys(currentStudent)
+        attendanceStatus: student.weeks?.[0]?.attended || false
       });
     }
-  }, [currentStudent, isRefetching, dataUpdatedAt, searchId, studentId]);
+  }, [student, isRefetching, dataUpdatedAt, searchId]);
 
   useEffect(() => {
     if (error && !studentDeleted) {
@@ -199,27 +116,19 @@ export default function StudentInfo() {
 
   // Handle student error
   useEffect(() => {
-    if (currentStudentError) {
-      if (currentStudentError.response?.status === 404) {
+    if (studentError) {
+      if (studentError.response?.status === 404) {
         console.log('❌ Student Info Page - Student not found:', {
-          searchId: searchId || studentId,
+          searchId,
           error: 'Student deleted or does not exist',
           timestamp: new Date().toLocaleTimeString()
         });
         setStudentDeleted(true);
-        
-        // For public access (no token), redirect to student_not_found page immediately
-        if (!hasAuthToken) {
-          // Immediate redirect without delay
-          router.push('/student_not_found');
-          return;
-        } else {
-          setError("Student not exists - This student may have been deleted");
-        }
+        setError("Student not exists - This student may have been deleted");
       } else {
         console.log('❌ Student Info Page - Error fetching student:', {
-          searchId: searchId || studentId,
-          error: currentStudentError.message,
+          searchId,
+          error: studentError.message,
           timestamp: new Date().toLocaleTimeString()
         });
         setStudentDeleted(false);
@@ -227,29 +136,24 @@ export default function StudentInfo() {
       }
     } else {
       // Clear error when student data loads successfully
-      if (currentStudent && !currentStudentError) {
+      if (student && !studentError) {
         setStudentDeleted(false);
         setError("");
       }
     }
-  }, [currentStudentError, searchId, studentId, currentStudent, hasAuthToken]);
+  }, [studentError, searchId, student]);
+
+  useEffect(() => {
+    // Authentication is now handled by _app.js with HTTP-only cookies
+    // This component will only render if user is authenticated
+  }, [router]);
 
   // Force refetch student data when searchId changes (when student is searched)
   useEffect(() => {
-    if (searchId && refetchStudent && hasAuthToken) {
+    if (searchId && refetchStudent) {
       refetchStudent();
     }
-  }, [searchId, refetchStudent, hasAuthToken]);
-
-  // After successful fetch, replace the search input with the student's ID
-  useEffect(() => {
-    if (currentStudent && currentStudent.id != null && hasAuthToken) {
-      const fetchedId = String(currentStudent.id);
-      if (studentId !== fetchedId) {
-        setStudentId(fetchedId);
-      }
-    }
-  }, [currentStudent, hasAuthToken]);
+  }, [searchId, refetchStudent]);
 
   const handleIdSubmit = async (e) => {
     e.preventDefault();
@@ -261,84 +165,35 @@ export default function StudentInfo() {
     setShowSearchResults(false);
     
     const searchTerm = studentId.trim();
-    const isAllDigits = /^\d+$/.test(searchTerm);
-    const isFullPhone = /^\d{11}$/.test(searchTerm);
     
-    // Full phone -> API accepts directly
-    if (isFullPhone) {
+    // Check if it's a numeric ID
+    if (/^\d+$/.test(searchTerm)) {
+      // It's a numeric ID, search directly
+      setSearchId(searchTerm);
+    } else {
+      // It's a name, search through all students (case-insensitive, includes)
       if (allStudents) {
-        const matchingStudents = allStudents.filter(s =>
-          s.phone === searchTerm || s.parentsPhone1 === searchTerm || s.parentsPhone === searchTerm
+        const matchingStudents = allStudents.filter(student => 
+          student.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
+        
         if (matchingStudents.length === 1) {
-          setSearchId(matchingStudents[0].id.toString());
-          setStudentId(matchingStudents[0].id.toString()); // Auto-replace with ID
-        } else {
-          setSearchId(searchTerm);
-        }
-      } else {
-        setSearchId(searchTerm);
-      }
-      return;
-    }
-    
-    // Pure digits, treat as possible ID or partial phone
-    if (isAllDigits) {
-      // Try exact ID match in local list first
-      if (allStudents) {
-        const byId = allStudents.find(s => String(s.id) === searchTerm);
-        if (byId) {
-          setSearchId(String(byId.id));
-          setStudentId(String(byId.id));
-          return;
-        }
-        // Partial phone/parent phone startsWith match (like name selection logic)
-        const term = searchTerm;
-        const matchingStudents = allStudents.filter(s => {
-          const phone = String(s.phone || '').replace(/[^0-9]/g, '');
-          const parent = String(s.parents_phone || s.parentsPhone || '').replace(/[^0-9]/g, '');
-          return phone.startsWith(term) || parent.startsWith(term);
-        });
-        if (matchingStudents.length === 1) {
+          // Single match, use it directly
           const foundStudent = matchingStudents[0];
           setSearchId(foundStudent.id.toString());
           setStudentId(foundStudent.id.toString());
-          return;
-        }
-        if (matchingStudents.length > 1) {
+        } else if (matchingStudents.length > 1) {
+          // Multiple matches, show selection
           setSearchResults(matchingStudents);
           setShowSearchResults(true);
           setError(`Found ${matchingStudents.length} students. Please select one.`);
-          return;
+        } else {
+          setError(`No student found with name starting with "${searchTerm}"`);
+          setSearchId("");
         }
-      }
-      // Fallback: just use numeric as id
-      setSearchId(searchTerm);
-      return;
-    }
-    
-    // Name search through all students
-    if (allStudents) {
-      const matchingStudents = allStudents.filter(student => 
-        student.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      
-      if (matchingStudents.length === 1) {
-        // Single match, use it directly
-        const foundStudent = matchingStudents[0];
-        setSearchId(foundStudent.id.toString());
-        setStudentId(foundStudent.id.toString());
-      } else if (matchingStudents.length > 1) {
-        // Multiple matches, show selection
-        setSearchResults(matchingStudents);
-        setShowSearchResults(true);
-        setError(`Found ${matchingStudents.length} students. Please select one.`);
       } else {
-        setError(`No student found matching "${searchTerm}"`);
-        setSearchId("");
+        setError("Student data not loaded. Please try again.");
       }
-    } else {
-      setError("Student data not loaded. Please try again.");
     }
   };
 
@@ -364,179 +219,100 @@ export default function StudentInfo() {
     setError("");
   };
 
-  // Helper function to get attendance status for a lesson
-  const getLessonAttendance = (lessonName) => {
-    if (!currentStudent || !currentStudent.lessons) return { attended: false, hwDone: false, homework_degree: null, quizDegree: null, message_state: false, student_message_state: false, parent_message_state: false, lastAttendance: null };
+  // Helper function to get attendance status for a week
+  const getWeekAttendance = (weekNumber) => {
+    if (!student || !student.weeks) return { attended: false, hwDone: false, quizDegree: null, message_state: false, lastAttendance: null };
     
-    // Handle both new object format and old array format for backward compatibility
-    let lessonData;
-    if (typeof currentStudent.lessons === 'object' && !Array.isArray(currentStudent.lessons)) {
-      // New object format
-      lessonData = currentStudent.lessons[lessonName];
-    } else if (Array.isArray(currentStudent.lessons)) {
-      // Old array format - find by lesson name
-      lessonData = currentStudent.lessons.find(l => l && l.lesson === lessonName);
-    } else if (currentStudent.weeks && Array.isArray(currentStudent.weeks)) {
-      // Very old weeks format - convert lesson name to week number
-      const weekIndex = lessons.indexOf(lessonName);
-      lessonData = weekIndex >= 0 ? currentStudent.weeks[weekIndex] : null;
-    }
-    
-    if (!lessonData) return { attended: false, hwDone: false, homework_degree: null, quizDegree: null, message_state: false, student_message_state: false, parent_message_state: false, lastAttendance: null };
+    const weekData = student.weeks.find(w => w.week === weekNumber);
+    if (!weekData) return { attended: false, hwDone: false, quizDegree: null, message_state: false, lastAttendance: null };
     
     return {
-      attended: lessonData.attended || false,
-      hwDone: lessonData.hwDone || false,
-      homework_degree: lessonData.homework_degree || null,
-      quizDegree: lessonData.quizDegree || null,
-      comment: lessonData.comment || null,
-      message_state: lessonData.message_state || false,
-      student_message_state: lessonData.student_message_state || false,
-      parent_message_state: lessonData.parent_message_state || false,
-      lastAttendance: lessonData.lastAttendance || null
+      attended: weekData.attended || false,
+      hwDone: weekData.hwDone || false,
+      quizDegree: weekData.quizDegree || null,
+      comment: weekData.comment || null,
+      message_state: weekData.message_state || false,
+      lastAttendance: weekData.lastAttendance || null
     };
   };
 
-  // Helper function to get available lessons (all lessons that exist in the database)
-  const getAvailableLessons = () => {
-    if (!currentStudent) return [];
+  // Helper function to get available weeks (all weeks that exist in the database)
+  const getAvailableWeeks = () => {
+    if (!student || !student.weeks || student.weeks.length === 0) return [];
     
-    // Handle new object format - get all lessons that exist in the student's database
-    if (currentStudent.lessons && typeof currentStudent.lessons === 'object' && !Array.isArray(currentStudent.lessons)) {
-      return Object.keys(currentStudent.lessons).map(lessonName => ({
-        lesson: lessonName,
-        ...currentStudent.lessons[lessonName]
-      })).filter(lesson => lesson.lesson); // Filter out any invalid lessons
-    }
-    
-    // Handle old array format
-    if (currentStudent.lessons && Array.isArray(currentStudent.lessons)) {
-      return currentStudent.lessons.filter(l => l && l.lesson);
-    }
-    
-    // Handle very old weeks format
-    if (currentStudent.weeks && Array.isArray(currentStudent.weeks)) {
-      return currentStudent.weeks.map((week, index) => ({
-        lesson: lessons[index] || `Lesson ${index + 1}`,
-        ...week
-      })).filter(week => week.attended !== undefined);
-    }
-    
-    return [];
+    // Return all weeks that exist in the database, sorted by week number
+    return student.weeks.sort((a, b) => a.week - b.week);
   };
 
-  // Helper to compute totals for the student across all lessons
+  // Helper to compute totals for the student across all weeks
   const getTotals = () => {
-    const availableLessons = getAvailableLessons();
-    const totalLessons = availableLessons.length;
-    
-    // Count lessons where student attended (attended = true)
-    const attendedLessons = availableLessons.filter(lesson => lesson.attended === true).length;
-    
-    // Count lessons where student was absent (attended = false)
-    const absent = availableLessons.filter(lesson => lesson.attended === false).length;
-    
-    // Count missing homework (only for lessons that exist in student records)
-    const lessons = getAvailableLessons();
-    const missingHW = lessons.filter(l => l && (l.hwDone === false || l.hwDone === "Not Completed" || l.hwDone === "not completed" || l.hwDone === "NOT COMPLETED")).length;
-    
-    // Count unattended quizzes (only for lessons that exist in student records)
-    const unattendQuiz = lessons.filter(l => l && (l.quizDegree === "Didn't Attend The Quiz" || l.quizDegree == null)).length;
-    
+    const weeks = Array.isArray(student?.weeks) ? student.weeks : [];
+    const absent = weeks.filter(w => w && w.attended === false).length;
+    const missingHW = weeks.filter(w => w && (w.hwDone === false || w.hwDone === "Not Completed" || w.hwDone === "not completed" || w.hwDone === "NOT COMPLETED")).length;
+    const unattendQuiz = weeks.filter(w => w && (w.quizDegree === "Didn't Attend The Quiz" || w.quizDegree == null)).length;
     return { absent, missingHW, unattendQuiz };
   };
 
-  // Helpers to build detailed lesson lists
-  const getAbsentLessons = (lessons) => {
-    const availableLessons = getAvailableLessons();
-    
-    return availableLessons
-      .filter(lesson => {
-        return lesson.attended === false; // Only include lessons where attended is explicitly false
-      })
-      .map(lesson => ({
-        lesson: lesson.lesson,
-        quizDegree: null // Absent lessons don't have quiz data
+  // Helpers to build detailed week lists
+  const getAbsentWeeks = (weeks) => {
+    if (!Array.isArray(weeks)) return [];
+    return weeks
+      .map((w, idx) => ({ idx, w }))
+      .filter(({ w }) => w && w.attended === false)
+      .map(({ idx, w }) => ({
+        week: (w.week ?? idx + 1),
+        quizDegree: w.quizDegree
       }));
   };
 
-  const getMissingHWLessons = (lessons) => {
-    if (!Array.isArray(lessons)) return [];
-    return lessons
-      .filter(l => l && (l.hwDone === false || l.hwDone === "Not Completed" || l.hwDone === "not completed" || l.hwDone === "NOT COMPLETED"))
-      .map(l => ({
-        lesson: l.lesson,
-        hwDone: l.hwDone,
-        quizDegree: l.quizDegree
+  const getMissingHWWeeks = (weeks) => {
+    if (!Array.isArray(weeks)) return [];
+    return weeks
+      .map((w, idx) => ({ idx, w }))
+      .filter(({ w }) => w && (w.hwDone === false || w.hwDone === "Not Completed" || w.hwDone === "not completed" || w.hwDone === "NOT COMPLETED"))
+      .map(({ idx, w }) => ({
+        week: (w.week ?? idx + 1),
+        hwDone: w.hwDone,
+        quizDegree: w.quizDegree
       }));
   };
 
-  const getUnattendQuizLessons = (lessons) => {
-    if (!Array.isArray(lessons)) return [];
-    return lessons
-      .filter(l => l && (l.quizDegree === "Didn't Attend The Quiz" || l.quizDegree == null))
-      .map(l => ({
-        lesson: l.lesson,
-        quizDegree: l.quizDegree
+  const getUnattendQuizWeeks = (weeks) => {
+    if (!Array.isArray(weeks)) return [];
+    return weeks
+      .map((w, idx) => ({ idx, w }))
+      .filter(({ w }) => w && (w.quizDegree === "Didn't Attend The Quiz" || w.quizDegree == null))
+      .map(({ idx, w }) => ({
+        week: (w.week ?? idx + 1),
+        quizDegree: w.quizDegree
       }));
   };
 
   const openDetails = (type) => {
-    if (!currentStudent) return;
+    if (!student) return;
     let title = '';
-    let lessonsList = [];
-    const lessons = getAvailableLessons();
+    let weeksList = [];
     if (type === 'absent') {
-      title = `Absent Lessons for ${currentStudent.name} • ID: ${currentStudent.id}`;
-      lessonsList = getAbsentLessons(); // No need to pass lessons parameter
+      title = `Absent Sessions for ${student.name} • ID: ${student.id}`;
+      weeksList = getAbsentWeeks(student.weeks);
     } else if (type === 'hw') {
-      title = `Missing Homework for ${currentStudent.name} • ID: ${currentStudent.id}`;
-      lessonsList = getMissingHWLessons(lessons);
+      title = `Missing Homework for ${student.name} • ID: ${student.id}`;
+      weeksList = getMissingHWWeeks(student.weeks);
     } else if (type === 'quiz') {
-      title = `Unattended Quizzes for ${currentStudent.name} • ID: ${currentStudent.id}`;
-      lessonsList = getUnattendQuizLessons(lessons);
+      title = `Unattended Quizzes for ${student.name} • ID: ${student.id}`;
+      weeksList = getUnattendQuizWeeks(student.weeks);
     }
     setDetailsType(type);
-    setDetailsWeeks(lessonsList);
+    setDetailsWeeks(weeksList);
     setDetailsTitle(title);
     setDetailsOpen(true);
   };
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '100vh',
-        flexDirection: 'column',
-        gap: '20px'
-      }}>
-        <div style={{
-          width: '40px',
-          height: '40px',
-          border: '4px solid #f3f3f3',
-          borderTop: '4px solid #1FA8DC',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }}></div>
-        <div style={{ fontSize: '18px', color: '#666' }}>Loading...</div>
-        <style jsx>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
 
   return (
     <div style={{ 
       padding: "20px 5px 20px 5px"
     }}>
-      <div ref={containerRef} style={{ maxWidth: 600, margin: "auto", padding: 24 }}>
+      <div ref={containerRef} style={{ maxWidth: 600, margin: "40px auto", padding: 24 }}>
         <style jsx>{`
           .header {
             display: flex;
@@ -623,20 +399,10 @@ export default function StudentInfo() {
             margin-top: 20px;
           }
           .student-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            flex-direction: column;
             gap: 16px;
             margin-bottom: 30px;
-          }
-          
-          .student-details .detail-item:last-child:nth-child(odd) {
-            grid-column: 1 / -1;
-          }
-          
-          @media (max-width: 768px) {
-            .student-details {
-              grid-template-columns: 1fr;
-            }
           }
           .detail-item {
             padding: 20px;
@@ -711,188 +477,195 @@ export default function StudentInfo() {
           }
         `}</style>
 
-        {/* Only show title if authenticated */}
-        {hasAuthToken && <Title>Student Info</Title>}
+        <Title>Student Info</Title>
 
-        {/* Only show search form if authenticated */}
-        {hasAuthToken && (
-          <div className="form-container">
-            <form onSubmit={handleIdSubmit} className="fetch-form">
-              <input
-                className="fetch-input"
-                type="text"
-                placeholder="Enter Student ID, Name, Phone Number"
-                value={studentId}
-                onChange={handleIdChange}
-                required
-              />
-              <button type="submit" className="fetch-btn" disabled={currentStudentLoading}>
-                {currentStudentLoading ? "Loading..." : "🔍 Search"}
-          </button>
-            </form>
-            
-            {/* Show search results if multiple matches found */}
-            {showSearchResults && searchResults.length > 0 && (
-              <div style={{ 
-                marginTop: "16px", 
-                padding: "16px", 
-                background: "#f8f9fa", 
-                borderRadius: "8px", 
-                border: "1px solid #dee2e6" 
-              }}>
-                <div style={{ 
-                  marginBottom: "12px", 
-                  fontWeight: "600", 
-                  color: "#495057" 
-                }}>
-                  Select a student:
-                </div>
-                {searchResults.map((student) => (
-                  <button
-                    key={student.id}
-                    onClick={() => handleStudentSelect(student)}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      padding: "12px 16px",
-                      margin: "8px 0",
-                      background: "white",
-                      border: "1px solid #dee2e6",
-                      borderRadius: "6px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.background = "#e9ecef";
-                      e.target.style.borderColor = "#1FA8DC";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.background = "white";
-                      e.target.style.borderColor = "#dee2e6";
-                    }}
-                  >
-                    <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
-                      {student.name} (ID: {student.id})
-                    </div>
-                    <div style={{ fontSize: "0.9rem", color: "#495057", marginTop: 4 }}>
-                      <span style={{ fontFamily: 'monospace' }}>{student.phone || 'N/A'}</span>
-                    </div>
-                    <div style={{ fontSize: "0.9rem", color: "#6c757d", marginTop: 2 }}>
-                      {student.grade} • {student.main_center}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Welcome title for public access (no token) */}
-        {currentStudent && !studentDeleted && !hasAuthToken && (
-          <div style={{
-            textAlign: "center",
-            marginBottom: "24px"
-          }}>
-            <h1 style={{
-              fontSize: "2.5rem",
-              fontWeight: "700",
-              color: "white",
-              margin: "0",
-              textShadow: "0 2px 4px rgba(0,0,0,0.1)"
+        <div className="form-container">
+          <form onSubmit={handleIdSubmit} className="fetch-form">
+            <input
+              className="fetch-input"
+              type="text"
+              placeholder="Enter student ID or Name"
+              value={studentId}
+              onChange={handleIdChange}
+              required
+            />
+            <button type="submit" className="fetch-btn" disabled={studentLoading}>
+              {studentLoading ? "Loading..." : "🔍 Search"}
+        </button>
+          </form>
+          
+          {/* Show search results if multiple matches found */}
+          {showSearchResults && searchResults.length > 0 && (
+            <div style={{ 
+              marginTop: "16px", 
+              padding: "16px", 
+              background: "#f8f9fa", 
+              borderRadius: "8px", 
+              border: "1px solid #dee2e6" 
             }}>
-              Welcome to Trackify!
-            </h1>
-          </div>
-        )}
-
-        {currentStudent && !studentDeleted && (
+              <div style={{ 
+                marginBottom: "12px", 
+                fontWeight: "600", 
+                color: "#495057" 
+              }}>
+                Select a student:
+              </div>
+              {searchResults.map((student) => (
+                <button
+                  key={student.id}
+                  onClick={() => handleStudentSelect(student)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "12px 16px",
+                    margin: "8px 0",
+                    background: "white",
+                    border: "1px solid #dee2e6",
+                    borderRadius: "6px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = "#e9ecef";
+                    e.target.style.borderColor = "#1FA8DC";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = "white";
+                    e.target.style.borderColor = "#dee2e6";
+                  }}
+                >
+                  <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
+                    {student.name} (ID: {student.id})
+                  </div>
+                  <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
+                    {student.grade} • {student.main_center}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {student && !studentDeleted && (
           <div className="info-container">
             <div className="student-details">
-              {/* Only show Student ID if user doesn't have token */}
-              {!hasAuthToken && (
+              {/* Profile Picture Preview - Read Only */}
+              <div className="detail-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <div className="detail-label" style={{ textAlign: 'center', width: '100%' }}>Profile Picture</div>
+                {profilePictureUrl ? (
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: '50%',
+                      background: '#e9ecef',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
+                      border: '2px solid #1FA8DC',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}
+                  >
+                    <img
+                      src={profilePictureUrl}
+                      alt="Profile"
+                      onError={(e) => {
+                        console.error('❌ Image failed to load:', profilePictureUrl);
+                        e.target.style.display = 'none';
+                      }}
+                      onLoad={() => {
+                        console.log('✅ Image loaded successfully:', profilePictureUrl);
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: '50%'
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: '50%',
+                      background: '#e9ecef',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
+                      border: '2px solid #e9ecef',
+                      position: 'relative'
+                    }}
+                  >
+                    <span style={{ 
+                      fontWeight: 700, 
+                      fontSize: 36, 
+                      color: '#adb5bd',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      height: '100%',
+                      lineHeight: 1,
+                      textAlign: 'center'
+                    }}>
+                      {student.name && student.name.length > 0 ? student.name[0].toUpperCase() : '?'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="detail-item">
+                <div className="detail-label">Full Name</div>
+                <div className="detail-value">{student.name}</div>
+              </div>
+              {userEmail && (
                 <div className="detail-item">
-                  <div className="detail-label">Student ID</div>
-                  <div className="detail-value">{currentStudent.id}</div>
+                  <div className="detail-label">Email</div>
+                  <div className="detail-value" style={{ fontFamily: 'monospace' }}>{userEmail}</div>
+                </div>
+              )}
+              {student.age && (
+                <div className="detail-item">
+                  <div className="detail-label">Age</div>
+                  <div className="detail-value">{student.age}</div>
                 </div>
               )}
               <div className="detail-item">
-                <div className="detail-label">Student Name</div>
-                <div className="detail-value">{currentStudent.name}</div>
-              </div>
-              <div className="detail-item">
-                <div className="detail-label">Student Phone</div>
-                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{currentStudent.phone}</div>
-              </div>
-              <div className="detail-item">
-                <div className="detail-label">Parent's Phone (1)</div>
-                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{currentStudent.parents_phone || currentStudent.parentsPhone || currentStudent.parentsPhone1 || 'N/A'}</div>
-              </div>
-              <div className="detail-item">
-                <div className="detail-label">Parent's Phone (2)</div>
-                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{currentStudent.parentsPhone2 || 'N/A'}</div>
+                <div className="detail-label">Grade</div>
+                <div className="detail-value">{student.grade}</div>
               </div>
               <div className="detail-item">
                 <div className="detail-label">School</div>
-                <div className="detail-value">{currentStudent.school || 'N/A'}</div>
+                <div className="detail-value">{student.school || 'N/A'}</div>
               </div>
               <div className="detail-item">
-                <div className="detail-label">Address</div>
-                <div className="detail-value">{currentStudent.address || 'N/A'}</div>
+                <div className="detail-label">Student Phone</div>
+                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{student.phone}</div>
+              </div>
+              <div className="detail-item">
+                <div className="detail-label">Parent's Phone</div>
+                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{student.parents_phone}</div>
               </div>
               <div className="detail-item">
                 <div className="detail-label">Main Center</div>
-                <div className="detail-value">{currentStudent.main_center}</div>
+                <div className="detail-value">{student.main_center}</div>
               </div>
+              {student.main_comment && (
               <div className="detail-item">
-                <div className="detail-label">Course</div>
-                <div className="detail-value">{currentStudent.grade || currentStudent.course || 'N/A'}</div>
+                <div className="detail-label">Main Comment</div>
+                <div className="detail-value" style={{ fontSize: '1rem' }}>{student.main_comment}</div>
               </div>
-              <div className="detail-item">
-                <div className="detail-label">Course Type</div>
-                <div className="detail-value">{currentStudent.courseType || 'N/A'}</div>
-              </div>
-              <div className="detail-item">
-                <div className="detail-label">Available Number of Sessions</div>
-                <div className="detail-value" style={{ 
-                  color: (currentStudent.payment?.numberOfSessions || 0) <= 2 ? '#dc3545' : '#212529',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontFamily: 'system-ui, -apple-system, sans-serif'
-                }}>
-                  <span style={{ 
-                    fontSize: '18px', 
-                    fontWeight: '800',
-                    lineHeight: '1.2'
-                  }}>
-                    {(currentStudent.payment?.numberOfSessions || 0)}
-                  </span>
-                  <span style={{ 
-                    fontSize: '17px', 
-                    fontWeight: '600',
-                    opacity: '0.9',
-                    textTransform: 'lowercase'
-                  }}>
-                    sessions
-                  </span>
-                </div>
-              </div>
-              {/* Always show hidden comment if authenticated */}
-              {hasAuthToken && (
-                <div className="detail-item">
-                  <div className="detail-label">Hidden Comment</div>
-                  <div className="detail-value" style={{ fontSize: '1rem' }}>
-                    {currentStudent.main_comment || 'No Comment'}
-                  </div>
-                </div>
               )}
               <div className="detail-item">
                 <div className="detail-label">Account Status</div>
                 <div className="detail-value" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
-                  {currentStudent.account_state === 'Deactivated' ? (
+                  {student.account_state === 'Deactivated' ? (
                     <span style={{ color: '#dc3545' }}>❌ Deactivated</span>
                   ) : (
                     <span style={{ color: '#28a745' }}>✅ Activated</span>
@@ -904,7 +677,7 @@ export default function StudentInfo() {
                 return (
                   <>
                     <div className="detail-item" onClick={() => openDetails('absent')} style={{ cursor: 'pointer' }}>
-                      <div className="detail-label">Total Absent Lessons</div>
+                      <div className="detail-label">Total Absent Sessions</div>
                       <div className="detail-value" style={{ color: '#dc3545', fontWeight: 600 }}>{totals.absent}</div>
                     </div>
                     <div className="detail-item" onClick={() => openDetails('hw')} style={{ cursor: 'pointer' }}>
@@ -920,8 +693,8 @@ export default function StudentInfo() {
               })()}
             </div>
             
-            <div className="weeks-title">All Lessons Records - Available Lessons ({getAvailableLessons().length} lessons)</div>
-            {getAvailableLessons().length === 0 ? (
+            <div className="weeks-title">All Weeks Records - Available Weeks ({getAvailableWeeks().length} weeks)</div>
+            {getAvailableWeeks().length === 0 ? (
               <div style={{
                 textAlign: 'center',
                 padding: '40px 20px',
@@ -932,72 +705,61 @@ export default function StudentInfo() {
                 borderRadius: '8px',
                 border: '1px solid #dee2e6'
               }}>
-                📋 No lessons records found for this student
+                📋 No weeks records found for this student
               </div>
             ) : (
-              <ScrollArea h="auto" type="hover" className={styles.scrolled}>
+              <ScrollArea h={400} type="hover" className={styles.scrolled}>
                 <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: '950px' }}>
                   <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
                     <Table.Tr>
-                      <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Lesson</Table.Th>
+                      <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Week</Table.Th>
                       <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Attendance Info</Table.Th>
                       <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Homework</Table.Th>
                       
                       <Table.Th style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>Quiz Degree</Table.Th>
                       <Table.Th style={{ width: '200px', minWidth: '200px', textAlign: 'center' }}>Comment</Table.Th>
-                      <Table.Th style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>Student Message State</Table.Th>
-                      <Table.Th style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>Parent Message State</Table.Th>
+                      <Table.Th style={{ width: '130px', minWidth: '130px', textAlign: 'center' }}>Message Status</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {getAvailableLessons().map((lesson) => {
-                      const lessonName = lesson.lesson;
-                      const lessonData = getLessonAttendance(lessonName);
+                    {getAvailableWeeks().map((week) => {
+                      const weekName = `week ${String(week.week).padStart(2, '0')}`;
+                      const weekData = getWeekAttendance(week.week);
                       
                       return (
-                        <Table.Tr key={lessonName}>
+                        <Table.Tr key={weekName}>
                           <Table.Td style={{ fontWeight: 'bold', color: '#1FA8DC', width: '120px', minWidth: '120px', textAlign: 'center', fontSize: '1rem' }}>
-                            {lessonName}
+                            {weekName}
                           </Table.Td>
                           <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>
                             <span style={{ 
-                              color: lessonData.attended ? (lessonData.lastAttendance ? '#212529' : '#28a745') : '#dc3545',
+                              color: weekData.attended ? (weekData.lastAttendance ? '#212529' : '#28a745') : '#dc3545',
                               fontWeight: 'bold',
                               fontSize: '1rem'
                             }}>
-                              {lessonData.attended ? (lessonData.lastAttendance || '✅ Yes') : '❌ Absent / Didn\'t attend yet'}
+                              {weekData.attended ? (weekData.lastAttendance || '✅ Yes') : '❌ Absent'}
                             </span>
                           </Table.Td>
                           <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>
                             {(() => {
-                              if (lessonData.hwDone === "No Homework") {
+                              if (weekData.hwDone === "No Homework") {
                                 return <span style={{ 
                                   color: '#dc3545',
                                   fontWeight: 'bold',
                                   fontSize: '1rem'
                                 }}>🚫 No Homework</span>;
-                              } else if (lessonData.hwDone === "Not Completed" || lessonData.hwDone === "not completed" || lessonData.hwDone === "NOT COMPLETED") {
+                              } else if (weekData.hwDone === "Not Completed" || weekData.hwDone === "not completed" || weekData.hwDone === "NOT COMPLETED") {
                                 return <span style={{ 
                                   color: '#ffc107',
                                   fontWeight: 'bold',
                                   fontSize: '1rem'
                                 }}>⚠️ Not Completed</span>;
-                              } else if (lessonData.hwDone === true) {
-                                // Check if there's a homework degree to display
-                                const homeworkDegree = lessonData.homework_degree;
-                                if (homeworkDegree && homeworkDegree !== null && homeworkDegree !== '') {
-                                  return <span style={{ 
-                                    color: '#28a745',
-                                    fontWeight: 'bold',
-                                    fontSize: '1rem'
-                                  }}>✅ Done ({homeworkDegree})</span>;
-                                } else {
-                                  return <span style={{ 
-                                    color: '#28a745',
-                                    fontWeight: 'bold',
-                                    fontSize: '1rem'
-                                  }}>✅ Done</span>;
-                                }
+                              } else if (weekData.hwDone === true) {
+                                return <span style={{ 
+                                  color: '#28a745',
+                                  fontWeight: 'bold',
+                                  fontSize: '1rem'
+                                }}>✅ Done</span>;
                               } else {
                                 return <span style={{ 
                                   color: '#dc3545',
@@ -1010,7 +772,7 @@ export default function StudentInfo() {
                           
                           <Table.Td style={{ width: '120px', minWidth: '120px', textAlign: 'center' }}>
                             {(() => {
-                              const value = lessonData.quizDegree !== null && lessonData.quizDegree !== undefined && lessonData.quizDegree !== '' ? lessonData.quizDegree : '0/0';
+                              const value = weekData.quizDegree !== null && weekData.quizDegree !== undefined && weekData.quizDegree !== '' ? weekData.quizDegree : '0/0';
                               if (value === "Didn't Attend The Quiz") {
                                 return <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '1rem' }}>❌ Didn't Attend The Quiz</span>;
                               } else if (value === "No Quiz") {
@@ -1029,27 +791,18 @@ export default function StudentInfo() {
                           </Table.Td>
                           <Table.Td style={{ width: '200px', minWidth: '200px', textAlign: 'center' }}>
                             {(() => {
-                              const weekComment = lessonData.comment;
+                              const weekComment = weekData.comment;
                               const val = (weekComment && String(weekComment).trim() !== '') ? weekComment : 'No Comment';
                               return <span style={{ fontSize: '1rem' }}>{val}</span>;
                             })()}
                           </Table.Td>
-                          <Table.Td style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>
+                          <Table.Td style={{ width: '130px', minWidth: '130px', textAlign: 'center' }}>
                             <span style={{ 
-                              color: lessonData.student_message_state ? '#28a745' : '#dc3545',
+                              color: weekData.message_state ? '#28a745' : '#dc3545',
                               fontWeight: 'bold',
                               fontSize: '1rem'
                             }}>
-                              {lessonData.student_message_state ? '✅ Sent' : '❌ Not Sent'}
-                            </span>
-                          </Table.Td>
-                          <Table.Td style={{ width: '140px', minWidth: '140px', textAlign: 'center' }}>
-                            <span style={{ 
-                              color: lessonData.parent_message_state ? '#28a745' : '#dc3545',
-                              fontWeight: 'bold',
-                              fontSize: '1rem'
-                            }}>
-                              {lessonData.parent_message_state ? '✅ Sent' : '❌ Not Sent'}
+                              {weekData.message_state ? '✅ Sent' : '❌ Not Sent'}
                             </span>
                           </Table.Td>
                         </Table.Tr>
@@ -1059,59 +812,6 @@ export default function StudentInfo() {
                 </Table>
               </ScrollArea>
             )}
-            
-            {/* Mock Exam Results Section */}
-            <div style={{ marginTop: '30px' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#495057', marginBottom: '20px', textAlign: 'center', borderBottom: '2px solid #1FA8DC', paddingBottom: '10px' }}>
-                Mock Exam Results
-              </div>
-              {currentStudent.mockExams && Array.isArray(currentStudent.mockExams) && currentStudent.mockExams.some(exam => exam && (exam.examDegree !== null || exam.percentage !== null)) ? (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                  {currentStudent.mockExams.map((exam, index) => {
-                    if (exam && (exam.examDegree !== null || exam.percentage !== null)) {
-                      return (
-                        <div key={index} className="detail-item" style={{ padding: '12px' }}>
-                          <div className="detail-label">Exam {index + 1}</div>
-                          <div className="detail-value">
-                            {exam.examDegree !== null && exam.outOf !== null && (
-                              <div>Degree: {exam.examDegree} / {exam.outOf}</div>
-                            )}
-                            {exam.percentage !== null && (
-                              <div style={{ color: '#28a745', fontWeight: 'bold', marginTop: '3px', marginBottom: '3px' }}>
-                                Percentage: {exam.percentage}%
-                              </div>
-                            )}
-                            {exam.date && (
-                              <div style={{ fontSize: '0.8rem', color: '#6c757d' }}>
-                                Date: {exam.date}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-              ) : (
-                <div style={{ 
-                  textAlign: 'center', 
-                  padding: '20px', 
-                  color: '#6c757d', 
-                  fontSize: '1rem',
-                  fontStyle: 'italic'
-                }}>
-                  There are no recent exams.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        
-        {/* Charts Tabs Section - Outside lessons container */}
-        {currentStudent?.lessons && (
-          <div style={{ marginTop: 24 }}>
-            <ChartTabs lessons={currentStudent.lessons} mockExams={currentStudent.mockExams} />
           </div>
         )}
         
@@ -1262,7 +962,7 @@ export default function StudentInfo() {
                   fontWeight: '500',
                   fontSize: '1rem'
                 }}>
-                  No {detailsType === 'absent' ? 'absent lessons' : 
+                  No {detailsType === 'absent' ? 'absent sessions' : 
                        detailsType === 'hw' ? 'missing homework' : 'unattended quizzes'} found.
                 </div>
               </div>
@@ -1321,7 +1021,7 @@ export default function StudentInfo() {
                       <Table.Tr>
                         <Table.Th style={{ width: '140px', textAlign: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                            📚 Lesson
+                            📅 Week
                           </div>
                         </Table.Th>
                         <Table.Th style={{ textAlign: 'center' }}>
@@ -1335,7 +1035,7 @@ export default function StudentInfo() {
                     </Table.Thead>
                     <Table.Tbody>
                       {detailsWeeks.map((info, index) => (
-                        <Table.Tr key={`student-${searchId || studentId}-${info.lesson}`} style={{
+                        <Table.Tr key={`student-${searchId}-${info.week}`} style={{
                           background: index % 2 === 0 ? '#ffffff' : '#f8f9fa',
                           transition: 'all 0.2s ease'
                         }}>
@@ -1355,7 +1055,7 @@ export default function StudentInfo() {
                               background: 'white',
                               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                             }}>
-                              {info.lesson}
+                              Week {String(info.week).padStart(2, '0')}
                             </div>
                           </Table.Td>
                           <Table.Td style={{ textAlign: 'center' }}>
@@ -1373,7 +1073,7 @@ export default function StudentInfo() {
                                 fontSize: '0.95rem',
                                 boxShadow: '0 2px 4px rgba(244, 67, 54, 0.2)'
                               }}>
-                                ❌ Absent / Didn't attend yet
+                                ❌ Absent
                               </div>
                             )}
                             {detailsType === 'hw' && (
@@ -1481,7 +1181,7 @@ export default function StudentInfo() {
                       border: '1px solid #dee2e6',
                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}>
-                      📊 Total: {detailsWeeks.length} {detailsType === 'absent' ? 'absent lessons' : 
+                      📊 Total: {detailsWeeks.length} {detailsType === 'absent' ? 'absent sessions' : 
                                  detailsType === 'hw' ? 'missing homework' : 'unattended quizzes'}
                     </div>
                   </div>
@@ -1500,3 +1200,6 @@ export default function StudentInfo() {
     </div>
   );
 }
+
+// Modal rendering
+// Keep component-level return uncluttered by adding modal just before closing tags

@@ -15,7 +15,7 @@ export default function Dashboard() {
   return (
     <div style={{ 
       // height: "calc(100dvh - 10rem)",
-      padding: "10px 50px 5px 35px",
+      padding: "10px 35px 5px 35px",
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto'
@@ -37,10 +37,10 @@ export default function Dashboard() {
               borderRadius: "50%",
               boxShadow: "0 8px 24px rgba(0, 0, 0, 0.15)",
               objectFit: "cover",
-              background: "white"
+              background: "transparent"
             }}
           />
-              <h1 style={{ margin: 0, color: "#ffffff" }}>Mr. Ahmed Badr Dashboard</h1>
+              <h1 style={{ margin: 0, color: "#ffffff" }}>System Main Dashboard</h1>
         </div>
         
         {/* Access Denied Message */}
@@ -136,20 +136,6 @@ export default function Dashboard() {
           style={{ background: "linear-gradient(90deg, #dc3545 0%, #ff6b6b 100%)" }}
         >
           🗑️ Delete Student
-        </button>
-        <button
-          className="dashboard-btn"
-          onClick={() => router.push("/dashboard/payment")}
-          style={{ background: "linear-gradient(90deg, #28a745 0%, #20c997 100%)" }}
-        >
-          💵 Payment
-        </button>
-        <button
-          className="dashboard-btn"
-          onClick={() => router.push("/dashboard/mock_exam")}
-          style={{ background: "linear-gradient(90deg, #6f42c1 0%, #8e44ad 100%)" }}
-        >
-          📝 Mock Exam
         </button>
         <button
           className="dashboard-btn"

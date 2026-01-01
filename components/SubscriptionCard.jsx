@@ -87,10 +87,26 @@ export default function SubscriptionCard() {
         return;
       }
 
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      let days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      let hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      let minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      let seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      // Redistribute time: if hours is 00 and days > 0, borrow 1 day to fill hours
+      if (hours === 0 && days > 0) {
+        days -= 1;
+        hours = 24;
+      }
+      // If minutes is 00 and hours > 0, borrow 1 hour to fill minutes
+      if (minutes === 0 && hours > 0) {
+        hours -= 1;
+        minutes = 60;
+      }
+      // If seconds is 00 and minutes > 0, borrow 1 minute to fill seconds
+      if (seconds === 0 && minutes > 0) {
+        minutes -= 1;
+        seconds = 60;
+      }
 
       // Check if all time components are zero
       if (days === 0 && hours === 0 && minutes === 0 && seconds === 0) {
@@ -397,7 +413,7 @@ export default function SubscriptionCard() {
       return false;
     }
     
-      return true;
+    return true;
   })();
 
   return (

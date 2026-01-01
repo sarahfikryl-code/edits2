@@ -77,7 +77,11 @@ export default function AllAssistants() {
   });
 
   // Extract assistants array and pagination info from response
-  const assistants = assistantsResponse?.data || [];
+  const assistantsRaw = assistantsResponse?.data || [];
+  // Only include supported roles
+  const assistants = assistantsRaw.filter(a =>
+    ['admin', 'assistant', 'developer'].includes(a.role)
+  );
   const pagination = assistantsResponse?.pagination || {
     currentPage: 1,
     totalPages: 1,
@@ -169,6 +173,9 @@ export default function AllAssistants() {
   }, [showPagePopup]);
 
   useEffect(() => {
+    // Authentication is now handled by _app.js with HTTP-only cookies
+    // This component will only render if user is authenticated
+    
     // Check if mobile
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -184,6 +191,19 @@ export default function AllAssistants() {
 
   // Note: Filtering is now handled server-side via API parameters
   // The assistants array already contains the filtered results for the current page
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Auto-refresh assistants data every 60 seconds (reduced frequency for large datasets)
   useEffect(() => {
@@ -274,10 +294,10 @@ export default function AllAssistants() {
               fontSize: '1.1rem',
               boxShadow: '0 4px 16px rgba(220, 53, 69, 0.08)'
             }}>
-              {error.message}
+              {error.message || "Failed to fetch assistants data"}
             </div>
           )}
-          {pagination.totalCount === 0 ? (
+          {assistants.length === 0 ? (
             <div className="no-results">
               {searchTerm
                 ? "❌ No assistants found with the search term."
@@ -285,95 +305,102 @@ export default function AllAssistants() {
               }
             </div>
           ) : (
-            <>
-              <ScrollArea h={400} type="hover" className={styles.scrolled}>
-                <Table striped highlightOnHover withTableBorder withColumnBorders>
-                  <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
-                    <Table.Tr>
-                      <Table.Th style={{ width: '15%' }}>Username</Table.Th>
-                      <Table.Th style={{ width: '20%' }}>Name</Table.Th>
-                      <Table.Th style={{ width: '25%' }}>Phone Number</Table.Th>
-                      <Table.Th style={{ width: '20%' }}>Role</Table.Th>
-                      <Table.Th style={{ width: '20%' }}>Account Status</Table.Th>
+            <ScrollArea h={400} type="hover" className={styles.scrolled}>
+              <Table striped highlightOnHover withTableBorder withColumnBorders>
+                <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa' }}>
+                  <Table.Tr>
+                    <Table.Th style={{ width: '12%', textAlign: 'center' }}>Username</Table.Th>
+                    <Table.Th style={{ width: '18%', textAlign: 'center' }}>Name</Table.Th>
+                    <Table.Th style={{ width: '18%', textAlign: 'center' }}>Phone Number</Table.Th>
+                    <Table.Th style={{ width: '15%', textAlign: 'center' }}>Role</Table.Th>
+                    <Table.Th style={{ width: '15%', textAlign: 'center' }}>Account Status</Table.Th>
+                    <Table.Th style={{ width: '22%', textAlign: 'center' }}>Added to Contact Assistants Page</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {assistants.map(assistant => (
+                    <Table.Tr key={assistant.id}>
+                      <Table.Td style={{ fontWeight: 'bold', color: '#1FA8DC', textAlign: 'center' }}>{assistant.id}</Table.Td>
+                      <Table.Td style={{ fontWeight: '600', textAlign: 'center' }}>{assistant.name}</Table.Td>
+                      <Table.Td style={{ fontFamily: 'monospace', fontSize: '0.9rem', textAlign: 'center' }}>{assistant.phone}</Table.Td>
+                      <Table.Td style={{ 
+                        fontWeight: '600',
+                        color: assistant.role === 'admin' ? '#dc3545' : (assistant.role === 'developer' ? '#28a745' : (assistant.role === 'assistant' ? '#3175b1' : '#6c757d')),
+                        textAlign: 'center'
+                      }}>{assistant.role}</Table.Td>
+                      <Table.Td style={{ textAlign: 'center' }}>
+                        {assistant.account_state === 'Deactivated' ? (
+                          <span style={{ color: '#dc3545', fontWeight: 'bold' }}>❌ Deactivated</span>
+                        ) : (
+                          <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Activated</span>
+                        )}
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: 'center' }}>
+                        {assistant.ATCA === 'yes' ? (
+                          <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Yes</span>
+                        ) : (
+                          <span style={{ color: '#dc3545', fontWeight: 'bold' }}>❌ No</span>
+                        )}
+                      </Table.Td>
                     </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {assistants.map(assistant => (
-                      <Table.Tr key={assistant.id}>
-                        <Table.Td style={{ fontWeight: 'bold', color: '#1FA8DC' }}>{assistant.id}</Table.Td>
-                        <Table.Td style={{ fontWeight: '600' }}>{assistant.name}</Table.Td>
-                        <Table.Td style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}>{assistant.phone}</Table.Td>
-                        <Table.Td style={{ 
-                          fontWeight: '600',
-                          color: assistant.role === 'admin' ? '#dc3545' : (assistant.role === 'developer' ? '#28a745' : '#3175b1')
-                        }}>{assistant.role}</Table.Td>
-                        <Table.Td style={{ textAlign: 'center' }}>
-                          {assistant.account_state === 'Deactivated' ? (
-                            <span style={{ color: '#dc3545', fontWeight: 'bold' }}>❌ Deactivated</span>
-                          ) : (
-                            <span style={{ color: '#28a745', fontWeight: 'bold' }}>✅ Activated</span>
-                          )}
-                        </Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </ScrollArea>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          )}
+          
+          {/* Pagination Controls */}
+          {pagination.totalCount > 0 && (
+            <div className="pagination-container">
+              <button
+                className="pagination-button"
+                onClick={handlePreviousPage}
+                disabled={!pagination.hasPrevPage}
+                aria-label="Previous page"
+              >
+                <IconChevronLeft size={20} stroke={2} />
+              </button>
               
-              {/* Pagination Controls */}
-              {pagination.totalCount > 0 && (
-                <div className="pagination-container">
-                  <button
-                    className="pagination-button"
-                    onClick={handlePreviousPage}
-                    disabled={!pagination.hasPrevPage}
-                    aria-label="Previous page"
-                  >
-                    <IconChevronLeft size={20} stroke={2} />
-                  </button>
-                  
-                  <div 
-                    className={`pagination-page-info ${pagination.totalPages > 1 ? 'clickable' : ''}`}
-                    onClick={() => pagination.totalPages > 1 && setShowPagePopup(!showPagePopup)}
-                    style={{ position: 'relative', cursor: pagination.totalPages > 1 ? 'pointer' : 'default', zIndex: 9999 }}
-                  >
-                    Page {pagination.currentPage} of {pagination.totalPages}
-                    
-                    {/* Page Number Popup */}
-                    {showPagePopup && pagination.totalPages > 1 && (
-                      <div className="page-popup" style={{ zIndex: 10000 }}>
-                        <div className="page-popup-content">
-                          <div className="page-popup-header">Select Page</div>
-                          <div className="page-popup-grid">
-                            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(pageNum => (
-                              <button
-                                key={pageNum}
-                                className={`page-number-btn ${pageNum === pagination.currentPage ? 'active' : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePageClick(pageNum);
-                                }}
-                              >
-                                {pageNum}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+              <div 
+                className={`pagination-page-info ${pagination.totalPages > 1 ? 'clickable' : ''}`}
+                onClick={() => pagination.totalPages > 1 && setShowPagePopup(!showPagePopup)}
+                style={{ position: 'relative', cursor: pagination.totalPages > 1 ? 'pointer' : 'default' }}
+              >
+                Page {pagination.currentPage} of {pagination.totalPages}
+                
+                {/* Page Number Popup */}
+                {showPagePopup && pagination.totalPages > 1 && (
+                  <div className="page-popup">
+                    <div className="page-popup-content">
+                      <div className="page-popup-header">Select Page</div>
+                      <div className="page-popup-grid">
+                        {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map(pageNum => (
+                          <button
+                            key={pageNum}
+                            className={`page-number-btn ${pageNum === pagination.currentPage ? 'active' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePageClick(pageNum);
+                            }}
+                          >
+                            {pageNum}
+                          </button>
+                        ))}
                       </div>
-                    )}
+                    </div>
                   </div>
-                  
-                  <button
-                    className="pagination-button"
-                    onClick={handleNextPage}
-                    disabled={!pagination.hasNextPage}
-                    aria-label="Next page"
-                  >
-                    <IconChevronRight size={20} stroke={2} />
-                  </button>
-                </div>
-              )}
-            </>
+                )}
+              </div>
+              
+              <button
+                className="pagination-button"
+                onClick={handleNextPage}
+                disabled={!pagination.hasNextPage}
+                aria-label="Next page"
+              >
+                <IconChevronRight size={20} stroke={2} />
+              </button>
+            </div>
           )}
         </div>
         <style jsx>{`
