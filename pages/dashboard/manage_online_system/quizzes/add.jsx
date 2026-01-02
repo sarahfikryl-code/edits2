@@ -439,7 +439,7 @@ export default function AddQuiz() {
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <Title backText="Back" href="/dashboard/manage_online_system/quizzes">Add Quiz</Title>
 
         <div className="form-container" style={{

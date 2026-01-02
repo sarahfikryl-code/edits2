@@ -218,7 +218,7 @@ export default function Homeworks() {
         minHeight: "100vh", 
         padding: "20px 5px 20px 5px"
       }}>
-        <div style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+        <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title backText="Back" href="/dashboard/manage_online_system">Homeworks</Title>
           
           {/* White Background Container */}
@@ -262,7 +262,7 @@ export default function Homeworks() {
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <Title backText="Back" href="/dashboard/manage_online_system">Homeworks</Title>
 
         {/* Search Bar */}

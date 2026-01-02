@@ -133,7 +133,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
           }}
         >
           <button
-            onClick={handleZoomOut}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleZoomOut();
+            }}
             disabled={zoom <= minZoom}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
@@ -173,7 +178,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
           </div>
           
           <button
-            onClick={handleZoomIn}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleZoomIn();
+            }}
             disabled={zoom >= maxZoom}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
@@ -197,7 +207,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
           
           {zoom !== 1 && (
             <button
-              onClick={handleResetZoom}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleResetZoom();
+              }}
               onMouseDown={(e) => e.stopPropagation()}
               style={{
                 padding: '10px 14px',
@@ -227,7 +242,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
           }}></div>
           
           <button
-            onClick={toggleFullscreen}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleFullscreen();
+            }}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               padding: '10px 14px',
@@ -262,7 +282,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
             cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
             position: 'relative',
             maxWidth: '100%',
-            maxHeight: '400px',
+            maxHeight: '1200px',
             display: 'inline-block',
             touchAction: 'none',
             width: '100%'
@@ -297,7 +317,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
             className="zoomable-image"
             style={{
               maxWidth: '100%',
-              maxHeight: '400px',
+              maxHeight: '1200px',
               borderRadius: '0 0 12px 12px',
               transform: `scale(${zoom}) translate(${position.x / zoom}px, ${position.y / zoom}px)`,
               transformOrigin: 'center center',
@@ -368,7 +388,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               }}
             >
               <button
-                onClick={handleZoomOut}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleZoomOut();
+                }}
                 disabled={zoom <= minZoom}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
@@ -406,7 +431,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               </div>
               
               <button
-                onClick={handleZoomIn}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleZoomIn();
+                }}
                 disabled={zoom >= maxZoom}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
@@ -428,7 +458,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               
               {zoom !== 1 && (
                 <button
-                  onClick={handleResetZoom}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleResetZoom();
+                  }}
                   onMouseDown={(e) => e.stopPropagation()}
                   style={{
                     padding: '10px 14px',
@@ -456,7 +491,12 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               }}></div>
               
               <button
-                onClick={toggleFullscreen}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFullscreen();
+                }}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
                   padding: '10px 14px',
@@ -527,11 +567,11 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
           }
           
           .image-container {
-            max-height: 300px !important;
+            max-height: 1200px !important;
           }
           
           .zoomable-image {
-            max-height: 300px !important;
+            max-height: 1200px !important;
           }
           
           .zoom-controls-bar {
@@ -570,11 +610,11 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
           }
           
           .image-container {
-            max-height: 250px !important;
+            max-height: 1200px !important;
           }
           
           .zoomable-image {
-            max-height: 250px !important;
+            max-height: 1200px !important;
           }
           
           .zoom-controls-bar {
@@ -610,11 +650,11 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
         
         @media (max-width: 360px) {
           .image-container {
-            max-height: 200px !important;
+            max-height: 1200px !important;
           }
           
           .zoomable-image {
-            max-height: 200px !important;
+            max-height: 1200px !important;
           }
           
           .zoom-controls-bar {

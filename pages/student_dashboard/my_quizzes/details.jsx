@@ -86,7 +86,7 @@ export default function QuizDetails() {
         minHeight: "100vh", 
         padding: "20px 5px 20px 5px"
       }}>
-        <div style={{ maxWidth: 1000, margin: "40px auto", padding: "12px" }}>
+        <div style={{ maxWidth: 1000, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title backText="Back" href="/student_dashboard/my_quizzes">Quiz Details</Title>
           
           <div className="details-container" style={{
@@ -201,7 +201,7 @@ export default function QuizDetails() {
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <Title backText="Back" href="/student_dashboard/my_quizzes">Quiz Details</Title>
 
         <div className="details-container" style={{
@@ -451,7 +451,7 @@ export default function QuizDetails() {
           }
           
           .question-image {
-            max-height: 250px !important;
+            max-height: 800px !important;
             margin-bottom: 12px !important;
           }
           
@@ -515,7 +515,7 @@ export default function QuizDetails() {
           }
           
           .question-image {
-            max-height: 200px !important;
+            max-height: 800px !important;
             margin-bottom: 10px !important;
           }
           

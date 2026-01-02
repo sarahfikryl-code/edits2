@@ -254,7 +254,7 @@ export default function ContactDeveloperPage() {
   return (
     <div style={{ 
       minHeight: "100vh", 
-      padding: "20px",
+      padding: "20px 5px 20px 5px",
       position: "relative",
       overflow: "hidden"
     }}>

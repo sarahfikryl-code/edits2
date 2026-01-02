@@ -299,7 +299,7 @@ export default function EditMyProfile() {
 
   return (
     <div style={{ minHeight: "100vh", padding: "20px 5px 20px 5px"}}>
-      <div style={{ maxWidth: 600, margin: "40px auto", padding: 24 }}>
+      <div style={{ maxWidth: 600, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <style jsx>{`
           .form-container {
             background: white;
@@ -399,12 +399,6 @@ export default function EditMyProfile() {
             font-weight: 600;
             box-shadow: 0 4px 16px rgba(108, 117, 125, 0.3);
           }
-          .profile-picture-container:hover .profile-picture-image {
-            filter: blur(4px);
-          }
-          .profile-picture-container:hover .profile-picture-cross {
-            opacity: 1 !important;
-          }
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -428,66 +422,81 @@ export default function EditMyProfile() {
             <div className="form-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
               <label style={{ textAlign: 'center', width: '100%' }}>Profile Picture</label>
               {form.profile_picture && imagePreview ? (
-                // Show uploaded image in circle with trash icon on hover
+                // Show uploaded image in circle
                 <div
-                  onClick={handleRemoveImage}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className="profile-picture-container"
                   style={{
-                    width: 120,
-                    height: 120,
-                    borderRadius: '50%',
-                    background: '#e9ecef',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: isDragging ? '0 4px 16px rgba(31,168,220,0.4)' : '0 2px 8px rgba(31,168,220,0.15)',
-                    border: isDragging ? '3px dashed #1FA8DC' : '2px solid #1FA8DC',
-                    overflow: 'hidden',
-                    cursor: 'pointer',
                     position: 'relative',
-                    transform: isDragging ? 'scale(1.05)' : 'scale(1)',
-                    transition: 'all 0.3s ease'
+                    display: 'inline-block'
                   }}
-                  title="Click to remove picture or drag & drop new image"
                 >
-                  <img
-                    src={imagePreview}
-                    alt="Profile preview"
-                    className="profile-picture-image"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: '50%',
-                      transition: 'filter 0.3s ease'
-                    }}
-                  />
-                  {/* Trash icon overlay - shown on hover */}
                   <div
-                    className="profile-picture-cross"
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className="profile-picture-container"
                     style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      width: 48,
-                      height: 48,
+                      width: 120,
+                      height: 120,
                       borderRadius: '50%',
-                      background: '#dc3545',
+                      background: '#e9ecef',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      opacity: 0,
-                      transition: 'opacity 0.3s ease',
+                      boxShadow: isDragging ? '0 4px 16px rgba(31,168,220,0.4)' : '0 2px 8px rgba(31,168,220,0.15)',
+                      border: isDragging ? '3px dashed #1FA8DC' : '2px solid #1FA8DC',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      transform: isDragging ? 'scale(1.05)' : 'scale(1)',
+                      transition: 'all 0.3s ease'
+                    }}
+                    title="Drag & drop new image"
+                  >
+                    <img
+                      src={imagePreview}
+                      alt="Profile preview"
+                      className="profile-picture-image"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: '50%'
+                      }}
+                    />
+                  </div>
+                  {/* Trash button in bottom right */}
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      background: '#dc3545',
+                      border: '2px solid white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      transition: 'all 0.2s ease',
                       zIndex: 10
                     }}
+                    onMouseEnter={(e) => {
+                      e.target.style.transform = 'scale(1.1)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.transform = 'scale(1)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                    }}
+                    title="Remove image"
                   >
                     <svg
-                      width="24"
-                      height="24"
+                      width="20"
+                      height="20"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="white"
@@ -499,7 +508,7 @@ export default function EditMyProfile() {
                       <line x1="10" y1="11" x2="10" y2="17" />
                       <line x1="14" y1="11" x2="14" y2="17" />
                     </svg>
-                  </div>
+                  </button>
                 </div>
               ) : (
                 // Show upload button when no image

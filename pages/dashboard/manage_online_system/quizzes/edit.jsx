@@ -564,7 +564,7 @@ export default function EditQuiz() {
         minHeight: "100vh", 
         padding: "20px 5px 20px 5px"
       }}>
-        <div style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+        <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title backText="Back" href="/dashboard/manage_online_system/quizzes">Edit Quiz</Title>
           <div style={{
             background: 'white',

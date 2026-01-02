@@ -92,7 +92,7 @@ export default function ChangePassword() {
 
   return (
     <div style={{ minHeight: "100vh", padding: "20px 5px 20px 5px"}}>
-      <div style={{ maxWidth: 800, margin: "40px auto", padding: 24 }}>
+      <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <style jsx>{`
           .form-container {
             background: white;

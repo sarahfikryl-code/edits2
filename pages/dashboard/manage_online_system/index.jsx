@@ -123,7 +123,7 @@ export default function ManageOnlineSystem() {
 
   return (
     <div className="page-wrapper" style={{ 
-      padding: "35px",
+      padding: "25px",
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto',
@@ -193,7 +193,7 @@ export default function ManageOnlineSystem() {
             }
             
             .dashboard-btn {
-              padding: 14px 10px;
+              padding: 14px 0;
               font-size: 1rem;
               margin-bottom: 20px;
               letter-spacing: 0.3px;
@@ -212,7 +212,7 @@ export default function ManageOnlineSystem() {
             }
             
             .dashboard-btn {
-              padding: 12px 8px;
+              padding: 14px 0;
               font-size: 0.95rem;
               margin-bottom: 17px;
               letter-spacing: 0.2px;
@@ -231,7 +231,7 @@ export default function ManageOnlineSystem() {
             }
             
             .dashboard-btn {
-              padding: 10px 6px;
+              padding: 10px 0;
               font-size: 0.9rem;
               margin-bottom: 14px;
               letter-spacing: 0.1px;

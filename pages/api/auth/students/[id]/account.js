@@ -48,7 +48,16 @@ export default async function handler(req, res) {
     }
 
     const { id } = req.query;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'Student ID is required' });
+    }
+    
     const studentId = parseInt(id);
+
+    if (isNaN(studentId)) {
+      return res.status(400).json({ error: 'Invalid student ID' });
+    }
 
     let client;
     try {
@@ -66,15 +75,24 @@ export default async function handler(req, res) {
       }
 
       // Return account info (excluding password)
-      res.status(200).json({
+      return res.status(200).json({
         id: userAccount.id,
         role: userAccount.role,
         account_state: userAccount.account_state || 'Activated',
         email: userAccount.email || null
       });
 
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      return res.status(500).json({ error: 'Database error occurred' });
     } finally {
-      if (client) await client.close();
+      if (client) {
+        try {
+          await client.close();
+        } catch (closeError) {
+          console.error('Error closing database connection:', closeError);
+        }
+      }
     }
 
   } catch (error) {

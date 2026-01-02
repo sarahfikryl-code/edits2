@@ -333,7 +333,7 @@ export default function CentersSchedule() {
           
           .schedule-container {
             margin: 20px auto !important;
-            padding: 15px 10px !important;
+            padding: 20px 5px 20px 5px !important;
             max-width: 95% !important;
           }
           
@@ -355,7 +355,7 @@ export default function CentersSchedule() {
           
           .schedule-container {
             margin: 10px auto !important;
-            padding: 10px 8px !important;
+            padding: 20px 5px 20px 5px !important;
           }
           
           .schedule-table {

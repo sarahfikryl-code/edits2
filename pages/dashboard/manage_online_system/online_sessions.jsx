@@ -630,7 +630,7 @@ export default function OnlineSessions() {
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <Title backText="Back" href="/dashboard/manage_online_system">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Image src="/play-pause.svg" alt="Play Pause" width={32} height={32} />
@@ -1954,7 +1954,7 @@ export default function OnlineSessions() {
               <iframe
                 src={buildEmbedUrl(selectedVideo.video_ID || selectedVideo.video_ID_1 || '')}
                 frameBorder="0"
-                allow="autoplay; encrypted-media; fullscreen"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                 allowFullScreen={true}
                 style={{
                   position: 'absolute',
@@ -1962,21 +1962,6 @@ export default function OnlineSessions() {
                   left: 0,
                   width: '100%',
                   height: '100%'
-                }}
-              />
-
-              {/* Top UI Mask Overlay - Hides YouTube's top UI elements (logo, date, copy link) */}
-              <div
-                className="youtube-ui-mask"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '80px',
-                  background: 'linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.6) 70%, transparent 100%)',
-                  pointerEvents: 'none',
-                  zIndex: 2
                 }}
               />
             </div>
@@ -2109,7 +2094,6 @@ export default function OnlineSessions() {
             
             .add-video-popup {
               padding: 16px !important;
-              margin: 5px;
               border-radius: 8px !important;
             }
             
@@ -2137,7 +2121,6 @@ export default function OnlineSessions() {
             
             .confirm-modal {
               padding: 16px !important;
-              margin: 5px;
               border-radius: 8px !important;
             }
             

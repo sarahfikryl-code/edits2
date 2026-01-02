@@ -397,7 +397,7 @@ Best regards
         minHeight: "100vh", 
         padding: "20px 5px 20px 5px"
       }}>
-        <div style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+        <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title href="/dashboard/manage_online_system" backText="Back">Verification Accounts Codes</Title>
           <LoadingSkeleton type="table" rows={8} columns={4} />
         </div>
@@ -410,7 +410,7 @@ Best regards
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div ref={containerRef} style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div ref={containerRef} style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <Title href="/dashboard/manage_online_system" backText="Back">Verification Accounts Codes</Title>
         
         {/* Search Bar */}
@@ -424,14 +424,15 @@ Best regards
         </div>
 
         <div className="history-container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative' }}>
-            <div style={{ flex: 1 }}></div>
+          <div className="title-button-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', position: 'relative' }}>
+            <div className="title-spacer" style={{ flex: 1 }}></div>
             <div className="history-title" style={{ marginBottom: 0, flex: 1, textAlign: 'center' }}>
               Verification Accounts Codes ({pagination.totalCount} records)
             </div>
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="add-button-wrapper" style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
               {/* Add Button */}
               <button
+                className="add-vac-btn"
                 onClick={handleAddVAC}
                 style={{
                   padding: '12px 24px',
@@ -1077,6 +1078,21 @@ Best regards
             .history-title {
               font-size: 1.3rem;
             }
+            .title-button-container {
+              flex-direction: column;
+              gap: 16px;
+              align-items: stretch !important;
+            }
+            .title-spacer {
+              display: none;
+            }
+            .add-button-wrapper {
+              flex: none !important;
+              justify-content: center !important;
+            }
+            .add-vac-btn {
+              width: 100%;
+            }
           }
           
           @media (max-width: 480px) {
@@ -1085,6 +1101,13 @@ Best regards
             }
             .history-title {
               font-size: 1.2rem;
+            }
+            .title-button-container {
+              marginBottom: 16px !important;
+            }
+            .add-vac-btn {
+              padding: 10px 20px !important;
+              font-size: 0.9rem !important;
             }
             
             .pagination-container {

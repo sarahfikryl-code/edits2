@@ -127,7 +127,7 @@ export default function QuizResult() {
         minHeight: "100vh", 
         padding: "20px 5px 20px 5px"
       }}>
-        <div style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+        <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title backText="Back" href="/student_dashboard/my_quizzes">Quiz Results</Title>
           
           {/* White Background Container */}
@@ -165,7 +165,7 @@ export default function QuizResult() {
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
         <Title backText="Back" href="/student_dashboard/my_quizzes">Quiz Results</Title>
 
         {/* White Background Container */}

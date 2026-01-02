@@ -12,7 +12,7 @@ export default function NeedHelp({ style = {}, className = "" }) {
           fontSize: '0.9rem',
           color: '#6c757d',
           textAlign: 'center',
-          marginBottom: '-20px',
+          marginBottom: '-15px',
           ...style
         }}
       >
@@ -68,7 +68,7 @@ export default function NeedHelp({ style = {}, className = "" }) {
         
         @media (max-width: 768px) {
           .need-help-container {
-            font-size: 0.85rem !important;
+            font-size: 0.9rem !important;
             padding: 0 10px;
           }
           
@@ -80,7 +80,7 @@ export default function NeedHelp({ style = {}, className = "" }) {
         
         @media (max-width: 480px) {
           .need-help-container {
-            font-size: 0.8rem !important;
+            font-size: 0.9rem !important;
             padding: 0 8px;
             line-height: 1.6;
           }

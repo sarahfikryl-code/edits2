@@ -89,7 +89,7 @@ export default function OnlineSessions() {
 
   // Handle VVC input change
   const handleVVCChange = (index, value) => {
-    // Only allow alphanumeric characters, single character
+    // Only allow alphanumeric characters, single character, preserve case
     const sanitized = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 1);
     const newVvc = [...vvc];
     newVvc[index] = sanitized;
@@ -568,8 +568,7 @@ export default function OnlineSessions() {
                           fontSize: '1.5rem',
                           fontWeight: '600',
                           border: vvcError ? '2px solid #dc3545' : '2px solid #ddd',
-                          borderRadius: '6px',
-                          textTransform: 'uppercase'
+                          borderRadius: '6px'
                         }}
                         required
                       />
@@ -708,7 +707,7 @@ export default function OnlineSessions() {
                 <iframe
                   src={buildEmbedUrl(selectedVideo.video_ID || selectedVideo.video_ID_1 || '')}
                   frameBorder="0"
-                  allow="autoplay; encrypted-media; fullscreen"
+                  allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                   allowFullScreen={true}
                   style={{
                     position: 'absolute',
@@ -716,21 +715,6 @@ export default function OnlineSessions() {
                     left: 0,
                     width: '100%',
                     height: '100%'
-                  }}
-                />
-
-                {/* Top UI Mask Overlay */}
-                <div
-                  className="youtube-ui-mask"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: '80px',
-                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.6) 70%, transparent 100%)',
-                    pointerEvents: 'none',
-                    zIndex: 2
                   }}
                 />
               </div>

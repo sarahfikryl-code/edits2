@@ -25,17 +25,23 @@ function DevToolsProtection({ userRole }) {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const isLoginPage = currentPath === '/';
 
-  useEffect(() => {
-    // Enable protection in both development and production for testing
+  // Check if user is developer
+  const isDeveloper = userRole === 'developer';
 
-    // Disable right-click (but allow left-click)
+  useEffect(() => {
+    // Skip protection for developers
+    if (isDeveloper) {
+      return;
+    }
+
+    // Disable right-click (but allow left-click) - only for non-developers
     const handleContextMenu = (e) => {
       e.preventDefault();
       e.stopPropagation();
       return false;
     };
 
-    // Disable keyboard shortcuts
+    // Disable keyboard shortcuts - only for non-developers
     const handleKeyDown = (e) => {
       // Disable F12
       if (e.key === 'F12' || e.keyCode === 123) {
@@ -73,80 +79,76 @@ function DevToolsProtection({ userRole }) {
       }
     };
 
-    // DevTools detection using multiple methods
-    let devToolsCheckInterval;
-    let devToolsDetectedFlag = false;
+    // Improved DevTools detection - uses requestAnimationFrame for efficient continuous checking
+    // This catches devtools opened via menu (3 dots > More tools > Developer tools)
+    let rafId = null;
+    let lastCheck = 0;
+    const CHECK_INTERVAL = 500; // Check every 500ms (not every frame to reduce overhead)
+    let detectionCount = 0;
+    const REQUIRED_DETECTIONS = 2; // Require 2 consecutive detections (reduced for faster detection)
 
     const detectDevTools = () => {
-      if (devToolsDetectedFlag) return;
-
-      // Method 1: Check window size difference (devtools open changes dimensions)
+      // Method 1: Check window size difference
       const widthDiff = window.outerWidth - window.innerWidth;
       const heightDiff = window.outerHeight - window.innerHeight;
       
-      if (widthDiff > 160 || heightDiff > 160) {
-        devToolsDetectedFlag = true;
-        setDevToolsDetected(true);
-        return;
-      }
-
-      // Method 2: Use debugger statement (triggers when devtools is open)
-      let devtoolsOpen = false;
-      const start = performance.now();
+      // Method 2: Check console timing
+      const consoleStart = performance.now();
+      console.log('%c', '');
+      const consoleEnd = performance.now();
+      const consoleTiming = consoleEnd - consoleStart;
       
-      // Create a function that will be detected if devtools is open
-      const checkDevTools = () => {
-        // Use native browser Image constructor, not Next.js Image component
+      // Method 3: Use devtools detection via toString
+      let devtoolsOpen = false;
+      try {
         const element = new window.Image();
-        let detected = false;
-        
         Object.defineProperty(element, 'id', {
           get: function() {
-            detected = true;
             devtoolsOpen = true;
           }
         });
-        
-        // This will trigger the getter if console is open
+        // This triggers the getter if console is open
         requestAnimationFrame(() => {
           console.log(element);
           console.clear();
         });
-        
-        return detected;
-      };
-
-      // Method 3: Check console timing
-      const consoleStart = performance.now();
-      console.log('%c', '');
-      const consoleEnd = performance.now();
-      
-      if (consoleEnd - consoleStart > 1) {
-        devToolsDetectedFlag = true;
-        setDevToolsDetected(true);
-        return;
-      }
-
-      // Method 4: Use debugger to detect
-      try {
-        debugger; // This will pause if devtools is open
       } catch (e) {
         // Ignore
       }
-
-      // Check using the getter method
-      if (checkDevTools()) {
-        devToolsDetectedFlag = true;
-        setDevToolsDetected(true);
-        return;
+      
+      // Check multiple conditions - any one can indicate devtools
+      // Lower thresholds to catch menu-opened devtools faster
+      const hasDimensionDiff = widthDiff > 160 || heightDiff > 160;
+      const hasSlowConsole = consoleTiming > 1.5; // Slightly lower threshold
+      const hasDevtoolsGetter = devtoolsOpen;
+      
+      // If any method detects devtools, increment counter
+      if (hasDimensionDiff || hasSlowConsole || hasDevtoolsGetter) {
+        detectionCount++;
+        if (detectionCount >= REQUIRED_DETECTIONS) {
+          setDevToolsDetected(true);
+          detectionCount = REQUIRED_DETECTIONS; // Keep at max to maintain detection
+        }
+      } else {
+        // Reset counter if all methods fail
+        if (detectionCount > 0) {
+          detectionCount = 0;
+        }
+        setDevToolsDetected(false);
       }
     };
 
-    // Start detection with multiple intervals for better coverage
-    devToolsCheckInterval = setInterval(detectDevTools, 500);
+    // Continuous detection using requestAnimationFrame (more efficient than setInterval)
+    const continuousCheck = (timestamp) => {
+      if (timestamp - lastCheck >= CHECK_INTERVAL) {
+        detectDevTools();
+        lastCheck = timestamp;
+      }
+      rafId = requestAnimationFrame(continuousCheck);
+    };
     
-    // Initial check
-    setTimeout(detectDevTools, 1000);
+    // Start continuous checking
+    rafId = requestAnimationFrame(continuousCheck);
 
     // Add event listeners with capture phase
     document.addEventListener('contextmenu', handleContextMenu, true);
@@ -154,47 +156,73 @@ function DevToolsProtection({ userRole }) {
     window.addEventListener('contextmenu', handleContextMenu, true);
     window.addEventListener('keydown', handleKeyDown, true);
 
+    // Listen for window resize (immediate check)
+    const handleResize = () => {
+      detectDevTools();
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Detect when keyboard shortcuts are attempted
+    const handleKeyDownDetection = (e) => {
+      if (e.key === 'F12' || e.keyCode === 123 ||
+          (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) ||
+          (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) ||
+          (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c' || e.keyCode === 67))) {
+        // Check immediately and after delay
+        detectDevTools();
+        setTimeout(() => {
+          detectDevTools();
+        }, 300);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDownDetection);
+
+    // Also check on focus/blur (devtools might affect window focus)
+    const handleFocus = () => {
+      setTimeout(() => detectDevTools(), 100);
+    };
+    const handleBlur = () => {
+      setTimeout(() => detectDevTools(), 100);
+    };
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
     // Cleanup
     return () => {
-      clearInterval(devToolsCheckInterval);
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
       document.removeEventListener('contextmenu', handleContextMenu, true);
       document.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('contextmenu', handleContextMenu, true);
       window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDownDetection);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
     };
-  }, []);
+  }, [isDeveloper]);
 
   // Handle logout when devtools detected (only after 15 seconds if still open, skip on login page)
   useEffect(() => {
+    // Skip for developers
+    if (isDeveloper) {
+      return;
+    }
+
     // Check if on login page
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
     const isLoginPage = currentPath === '/';
     
-    // On login page, only check if devtools are closed (no timer, no redirect)
+    // On login page, show message but don't redirect
     if (isLoginPage && devToolsDetected) {
-      const checkInterval = setInterval(() => {
-        const widthDiff = window.outerWidth - window.innerWidth;
-        const heightDiff = window.outerHeight - window.innerHeight;
-        
-        if (widthDiff < 160 && heightDiff < 160) {
-          const consoleStart = performance.now();
-          console.log('%c', '');
-          const consoleEnd = performance.now();
-          
-          if (consoleEnd - consoleStart < 1) {
-            clearInterval(checkInterval);
-            setDevToolsDetected(false);
-          }
-        }
-      }, 500);
-      
-      return () => clearInterval(checkInterval);
+      // Just show the message, no timer or redirect
+      return;
     }
     
     // For non-login pages, set up timer and redirect
     if (devToolsDetected && !isLoggingOut && !isLoginPage) {
       let redirectTimeout;
-      let checkInterval;
       let timerInterval;
       
       // Reset timer to 15 when devtools detected
@@ -218,8 +246,15 @@ function DevToolsProtection({ userRole }) {
         // Clear timer interval if still running
         clearInterval(timerInterval);
         
-        // Check if devtools are still open
-        if (devToolsDetected) {
+        // Check if devtools are still open (one final check)
+        const widthDiff = window.outerWidth - window.innerWidth;
+        const heightDiff = window.outerHeight - window.innerHeight;
+        const consoleStart = performance.now();
+        console.log('%c', '');
+        const consoleEnd = performance.now();
+        const stillOpen = (widthDiff > 200 || heightDiff > 200) && (consoleEnd - consoleStart > 2);
+        
+        if (stillOpen && devToolsDetected) {
           setIsLoggingOut(true);
           setTimer(0);
           
@@ -264,47 +299,27 @@ function DevToolsProtection({ userRole }) {
           };
           
           logout();
+        } else {
+          // Devtools closed, reset state
+          clearInterval(timerInterval);
+          setDevToolsDetected(false);
+          setIsLoggingOut(false);
+          setTimer(15);
         }
       }, 15000); // 15 seconds
       
-      // Check if devtools are closed (every 500ms)
-      checkInterval = setInterval(() => {
-        const widthDiff = window.outerWidth - window.innerWidth;
-        const heightDiff = window.outerHeight - window.innerHeight;
-        
-        // If devtools appear to be closed (dimensions normalized)
-        if (widthDiff < 160 && heightDiff < 160) {
-          // Double check with console timing
-          const consoleStart = performance.now();
-          console.log('%c', '');
-          const consoleEnd = performance.now();
-          
-          if (consoleEnd - consoleStart < 1) {
-            // Devtools appear to be closed, reset state
-            clearTimeout(redirectTimeout);
-            clearInterval(checkInterval);
-            clearInterval(timerInterval);
-            setDevToolsDetected(false);
-            setIsLoggingOut(false);
-            setTimer(15);
-          }
-        }
-      }, 500);
-      
       return () => {
         clearTimeout(redirectTimeout);
-        clearInterval(checkInterval);
         clearInterval(timerInterval);
       };
     } else if (!devToolsDetected) {
       // Reset timer when devtools are not detected
       setTimer(15);
     }
-  }, [devToolsDetected, isLoggingOut]);
+  }, [devToolsDetected, isLoggingOut, isDeveloper]);
 
-  // On login page, show message for ALL users (including developers)
-  // On other pages, bypass for developers
-  if (!isLoginPage && userRole === 'developer') {
+  // Skip all protection for developers
+  if (isDeveloper) {
     return null;
   }
 

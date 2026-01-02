@@ -312,18 +312,18 @@ export default function Centers() {
     setShowAddForm(false);
     setNewCenterName('');
     setNewCenterLocation('');
-    setNewCenterGrades([{ grade: '', timings: [{ day: '', time: '', period: 'AM', dayOpen: false, periodOpen: false }], gradeOpen: false }]);
+    setNewCenterGrades([{ grade: '', timings: [{ day: '', time: '', period: 'PM', dayOpen: false, periodOpen: false }], gradeOpen: false }]);
     setError('');
   };
 
   // Add new grade to add form
   const addNewGrade = () => {
-    setNewCenterGrades([...newCenterGrades, { grade: '', timings: [{ day: '', time: '', period: 'AM', dayOpen: false, periodOpen: false }], gradeOpen: false }]);
+    setNewCenterGrades([...newCenterGrades, { grade: '', timings: [{ day: '', time: '', period: 'PM', dayOpen: false, periodOpen: false }], gradeOpen: false }]);
   };
 
   // Add new grade to edit form
   const addEditGrade = () => {
-    setEditGrades([...editGrades, { grade: '', timings: [{ day: '', time: '', period: 'AM', dayOpen: false, periodOpen: false }], gradeOpen: false }]);
+    setEditGrades([...editGrades, { grade: '', timings: [{ day: '', time: '', period: 'PM', dayOpen: false, periodOpen: false }], gradeOpen: false }]);
   };
 
   // Remove grade section from add form
@@ -807,8 +807,15 @@ export default function Centers() {
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="confirm-modal">
-          <div className="confirm-content">
+        <div 
+          className="confirm-modal"
+          onClick={(e) => {
+            if (e.target.classList.contains('confirm-modal')) {
+              cancelDelete();
+            }
+          }}
+        >
+          <div className="confirm-content" onClick={(e) => e.stopPropagation()}>
             <h3>Confirm Delete</h3>
             <p>Are you sure you want to delete center <strong>{centerToDelete?.name}</strong>?</p>
             <p><strong>This action cannot be undone!</strong></p>
@@ -834,8 +841,15 @@ export default function Centers() {
 
       {/* Add Center Modal */}
       {showAddForm && (
-        <div className="add-center-modal">
-          <div className="add-center-content">
+        <div 
+          className="add-center-modal"
+          onClick={(e) => {
+            if (e.target.classList.contains('add-center-modal')) {
+              cancelAdd();
+            }
+          }}
+        >
+          <div className="add-center-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Add New Center</h3>
               <button
@@ -1043,8 +1057,15 @@ export default function Centers() {
 
       {/* Edit Center Modal */}
       {editingCenter && (
-        <div className="rename-center-modal">
-          <div className="rename-center-content">
+        <div 
+          className="rename-center-modal"
+          onClick={(e) => {
+            if (e.target.classList.contains('rename-center-modal')) {
+              cancelEdit();
+            }
+          }}
+        >
+          <div className="rename-center-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Edit Center</h3>
               <button
@@ -1342,6 +1363,8 @@ export default function Centers() {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0,0,0,0.25);
+          backdrop-filter: blur(5px);
+          -webkit-backdrop-filter: blur(5px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1396,6 +1419,8 @@ export default function Centers() {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0,0,0,0.25);
+          backdrop-filter: blur(5px);
+          -webkit-backdrop-filter: blur(5px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1672,6 +1697,8 @@ export default function Centers() {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0,0,0,0.25);
+          backdrop-filter: blur(5px);
+          -webkit-backdrop-filter: blur(5px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1746,6 +1773,8 @@ export default function Centers() {
           right: 0;
           bottom: 0;
           background: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(5px);
+          -webkit-backdrop-filter: blur(5px);
           display: flex;
           align-items: center;
           justify-content: center;

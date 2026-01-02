@@ -24,7 +24,7 @@ export default function StudentDashboard() {
 
   return (
     <div style={{ 
-      padding: "35px",
+      padding: "40px",
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto'

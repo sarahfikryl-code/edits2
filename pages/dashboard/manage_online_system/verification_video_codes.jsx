@@ -369,7 +369,7 @@ export default function VerificationVideoCodes() {
         minHeight: "100vh", 
         padding: "20px 5px 20px 5px"
       }}>
-        <div style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+        <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title href="/dashboard/manage_online_system" backText="Back">Verification Video Codes</Title>
           <LoadingSkeleton type="table" rows={8} columns={4} />
         </div>
@@ -382,7 +382,7 @@ export default function VerificationVideoCodes() {
       minHeight: "100vh", 
       padding: "20px 5px 20px 5px" 
     }}>
-      <div ref={containerRef} className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "12px" }}>
+      <div ref={containerRef} className="page-content" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
           <Title href="/dashboard/manage_online_system" backText="Back">Verification Video Codes</Title>
 
         {/* Search Bar */}
@@ -1199,7 +1199,7 @@ export default function VerificationVideoCodes() {
             }
             /* Payment State Button */
             .payment-state-btn {
-              padding: 4px 8px !important;
+              padding: 8px !important;
               font-size: 0.75rem !important;
               min-width: 70px !important;
             }
@@ -1258,7 +1258,7 @@ export default function VerificationVideoCodes() {
             }
             /* Payment State Button */
             .payment-state-btn {
-              padding: 3px 6px !important;
+              padding: 6px !important;
               font-size: 0.7rem !important;
               min-width: 60px !important;
             }
