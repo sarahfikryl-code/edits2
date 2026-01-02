@@ -19,7 +19,7 @@ const nextConfig = {
           },
           {
             key: 'Access-Control-Allow-Origin',
-            value: '*', // Change this to specific origins in production (e.g., 'https://yourdomain.com')
+            value: 'https://demosys.myvnc.com', // Change this to specific origins in production (e.g., 'https://yourdomain.com')
           },
           {
             key: 'Access-Control-Allow-Methods',

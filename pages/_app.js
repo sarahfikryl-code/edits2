@@ -25,12 +25,6 @@ function DevToolsProtection({ userRole }) {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const isLoginPage = currentPath === '/';
 
-  // On login page, show message for ALL users (including developers)
-  // On other pages, bypass for developers
-  if (!isLoginPage && userRole === 'developer') {
-    return null;
-  }
-
   useEffect(() => {
     // Enable protection in both development and production for testing
 
@@ -308,6 +302,12 @@ function DevToolsProtection({ userRole }) {
     }
   }, [devToolsDetected, isLoggingOut]);
 
+  // On login page, show message for ALL users (including developers)
+  // On other pages, bypass for developers
+  if (!isLoginPage && userRole === 'developer') {
+    return null;
+  }
+
   // Render protection in both development and production for testing
   // Show protection on all pages including login page (but with different behavior)
   if (devToolsDetected) {
@@ -383,7 +383,7 @@ function DevToolsProtection({ userRole }) {
               <>Developer tools detected. Please close them to continue.</>
             ) : (
               <>
-                Developer tools detected. Close them to continue or you'll be redirected to login in{' '}
+                Developer tools detected. Close them to continue or you&apos;ll be redirected to login in{' '}
                 <span className="devtools-timer" style={{
                   color: '#1FA8DC',
                   fontSize: '1.8rem',
@@ -834,7 +834,7 @@ export default function App({ Component, pageProps }) {
     };
 
     checkAuth();
-  }, [router.pathname, adminPages, router]);
+  }, [router.pathname, adminPages, developerPages, publicPages, router]);
 
   // Handle route changes for main preloader
   useEffect(() => {

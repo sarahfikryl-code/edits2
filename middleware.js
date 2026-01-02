@@ -9,7 +9,7 @@ export function middleware(request) {
         status: 200,
         headers: {
           'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Allow-Origin': '*', // Change this to specific origins in production
+          'Access-Control-Allow-Origin': 'https://demosys.myvnc.com', // Change this to specific origins in production
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
           'Access-Control-Allow-Headers': 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization',
           'Access-Control-Max-Age': '86400', // 24 hours
