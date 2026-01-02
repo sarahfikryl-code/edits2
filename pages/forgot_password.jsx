@@ -166,7 +166,8 @@ export default function ForgotPassword() {
     try {
       await apiClient.post('/api/auth/forgot-password/reset', {
         id: id,
-        newPassword: form.newPassword
+        newPassword: form.newPassword,
+        sig: sig
       });
 
       setSuccess(true);

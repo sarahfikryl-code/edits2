@@ -71,36 +71,25 @@ export default async function handler(req, res) {
     }
 
     // Verify HMAC signature
+    // The signature itself proves that OTP was verified, since it's only generated after successful OTP verification
     const expectedSig = generateHMAC(user.id.toString());
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(sig),
-      Buffer.from(expectedSig)
-    );
+    let isValid = false;
+    try {
+      isValid = crypto.timingSafeEqual(
+        Buffer.from(sig),
+        Buffer.from(expectedSig)
+      );
+    } catch (error) {
+      console.error('Signature verification error:', error);
+      return res.json({ valid: false, error: 'Invalid signature format' });
+    }
 
     if (!isValid) {
       return res.json({ valid: false, error: 'Invalid signature' });
     }
 
-    // Check if OTP exists and is still valid (not expired)
-    const otpData = user.OTP_rest_password;
-    if (!otpData || !otpData.OTP_Expiration_Date) {
-      return res.json({ 
-        valid: false, 
-        error: 'OTP not found or expired. Please request a new OTP.' 
-      });
-    }
-
-    const expirationDate = new Date(otpData.OTP_Expiration_Date);
-    const now = new Date();
-
-    // Check if OTP has expired (expiration date must be greater than now)
-    if (expirationDate <= now) {
-      return res.json({ 
-        valid: false, 
-        error: 'OTP has expired. Please request a new OTP.' 
-      });
-    }
-
+    // Signature is valid - allow access to reset password page
+    // The signature proves that the OTP was successfully verified
     res.json({ valid: true });
   } catch (error) {
     console.error('Verify signature error:', error);

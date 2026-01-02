@@ -1,6 +1,6 @@
 import { MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 
@@ -34,13 +34,40 @@ function loadEnvConfig() {
 const envConfig = loadEnvConfig();
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'topphysics';
-const RESEND_API_KEY = envConfig.RESEND_API_KEY || envConfig.RESND_API_KEY || process.env.RESEND_API_KEY || process.env.RESND_API_KEY;
+const EMAIL_USER = envConfig.EMAIL_USER || process.env.EMAIL_USER;
+// Remove spaces from app password (Gmail app passwords may have spaces for readability)
+const EMAIL_PASS = (envConfig.EMAIL_PASS || process.env.EMAIL_PASS)?.replace(/\s+/g, '') || '';
 
-if (!RESEND_API_KEY) {
-  console.error('❌ RESEND_API_KEY is not configured');
+// Debug logging (only in development)
+if (process.env.NODE_ENV === 'development') {
+  console.log('📧 Email Config Check:', {
+    hasEmailUser: !!EMAIL_USER,
+    hasEmailPass: !!EMAIL_PASS,
+    emailUserLength: EMAIL_USER?.length || 0,
+    emailPassLength: EMAIL_PASS?.length || 0,
+    emailUserPreview: EMAIL_USER ? EMAIL_USER.substring(0, 5) + '...' : 'N/A'
+  });
 }
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+// Create nodemailer transporter for Gmail SMTP
+let transporter = null;
+if (EMAIL_USER && EMAIL_PASS) {
+  transporter = nodemailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: EMAIL_USER,
+      pass: EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+} else {
+  console.error('❌ Gmail SMTP credentials are not configured');
+}
 
 // Generate 8-digit random OTP
 function generateOTP() {
@@ -54,7 +81,7 @@ export default async function handler(req, res) {
 
   const { id } = req.body;
 
-  console.log('📧 Send OTP request received:', { id, hasResendKey: !!RESEND_API_KEY });
+  console.log('📧 Send OTP request received:', { id, hasEmailConfig: !!(EMAIL_USER && EMAIL_PASS) });
 
   if (!id) {
     return res.status(400).json({ error: 'ID is required' });
@@ -131,48 +158,47 @@ export default async function handler(req, res) {
     const resendExpirationDate = new Date();
     resendExpirationDate.setMinutes(resendExpirationDate.getMinutes() + 3);
 
-    // Check if Resend is configured
-    if (!resend || !RESEND_API_KEY) {
-      console.error('❌ Resend is not configured. RESEND_API_KEY:', !!RESEND_API_KEY);
-      console.error('❌ RESEND_API_KEY from env.config:', !!envConfig.RESEND_API_KEY);
-      console.error('❌ RESEND_API_KEY from process.env:', !!process.env.RESEND_API_KEY);
+    // Check if Gmail SMTP is configured
+    if (!transporter || !EMAIL_USER || !EMAIL_PASS) {
+      console.error('❌ Gmail SMTP is not configured.');
+      console.error('❌ EMAIL_USER from env.config:', !!envConfig.EMAIL_USER);
+      console.error('❌ EMAIL_PASS from env.config:', !!envConfig.EMAIL_PASS);
+      console.error('❌ EMAIL_USER from process.env:', !!process.env.EMAIL_USER);
+      console.error('❌ EMAIL_PASS from process.env:', !!process.env.EMAIL_PASS);
       return res.status(500).json({ 
         error: 'Email service is not configured. Please contact administrator.',
         debug: process.env.NODE_ENV === 'development' ? {
           envConfigKeys: Object.keys(envConfig),
-          hasResendInEnv: 'RESEND_API_KEY' in envConfig || 'RESND_API_KEY' in envConfig
+          hasEmailUser: 'EMAIL_USER' in envConfig,
+          hasEmailPass: 'EMAIL_PASS' in envConfig
         } : undefined
-      });
-    }
-
-    // Validate API key format (Resend keys start with 're_')
-    if (!RESEND_API_KEY.startsWith('re_')) {
-      console.error('❌ Invalid Resend API key format. Keys should start with "re_"');
-      return res.status(500).json({ 
-        error: 'Invalid email service configuration. Please check RESEND_API_KEY format.' 
       });
     }
 
     console.log('📧 Attempting to send OTP email to:', user.email);
     console.log('🔑 Generated OTP code:', otpCode);
     console.log('👤 User name:', userName);
+    console.log('📧 Using email from:', EMAIL_USER);
 
     try {
-      const emailResult = await resend.emails.send({
-        from: "Student System <onboarding@resend.com>",
+      // Verify connection before sending
+      await transporter.verify();
+      console.log('✅ SMTP connection verified');
+      
+      const emailResult = await transporter.sendMail({
+        from: `"Demo Attendance System" <${EMAIL_USER}>`,
         to: user.email,
-        subject: "Password Reset Code",
+        subject: "Password Reset OTP Code",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #2C5281; padding: 0;">
             <div style="padding: 40px 30px; background-color: #2C5281;">
               <div style="text-align: center; margin-bottom: 30px;">
-                <img src="https://demosys.myvnc.com/logo.png" alt="Logo" style="width: 50px; height: 50px; margin: 0 auto; display: block;" />
+                <img src="https://demosys.myvnc.com/logo.png" alt="Logo" style="width: 100px; height: 100px; margin: 0 auto; display: block;" />
               </div>
-              <h1 style="color: white; font-size: 28px; font-weight: bold; text-align: center; margin: 0 0 30px 0; padding: 0;">Welcome to Demo Attendance System</h1>
               <p style="color: white; font-size: 16px; margin: 0 0 20px 0;">Hi ${userName},</p>
               <p style="color: white; font-size: 16px; margin: 0 0 30px 0;">Welcome to the Demo Attendance System platform! To reset your password, please use this OTP code:</p>
-              <div style="background-color: #2A4264; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                <div style="color: white; font-size: 32px; font-weight: bold; letter-spacing: 4px; font-family: 'Courier New', monospace;">${otpCode}</div>
+              <div style="background-color: #2A4264; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #0E80C7;">
+                <div style="color: white; font-size: 32px; font-weight: bold; letter-spacing: 4px; font-family: 'Roboto, Sans-serif';">${otpCode}</div>
               </div>
               <p style="color: white; font-size: 16px; margin: 20px 0;">This code is valid for <strong>10 minutes</strong>. Please do not share this code with anyone.</p>
               <p style="color: white; font-size: 16px; margin: 30px 0 0 0;">If you didn't request this, please ignore this email or contact our support team.</p>
@@ -185,38 +211,19 @@ export default async function handler(req, res) {
                 <a href="https://demosys.myvnc.com" style="color: white; text-decoration: underline;">demosys.myvnc.com</a>
               </div>
             </div>
-            <div style="border-top: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 30px; background-color: #2A4264;">
+            <div style="border-top: 1px solid rgb(94, 88, 88); padding: 15px 30px; background-color: #2A4264;">
               <p style="color: white; font-size: 12px; margin: 0; text-align: center;">This is an automated message. Please do not reply directly to this email.</p>
             </div>
           </div>
         `,
       });
 
-      console.log('✅ Email API response:', emailResult);
-      console.log('✅ Email result data:', JSON.stringify(emailResult, null, 2));
+      console.log('✅ Email sent successfully');
+      console.log('✅ Email message ID:', emailResult.messageId);
+      console.log('✅ Email response:', emailResult.response);
       
-      // Check for errors in response first
-      if (emailResult?.error) {
-        console.error('❌ Email error in response:', emailResult.error);
-        return res.status(500).json({ 
-          error: emailResult.error.message || 'Failed to send email',
-          details: emailResult.error
-        });
-      }
-
-      // Check if email was actually sent successfully
-      // Resend SDK returns { data: { id: ... }, error: null } or throws an error
-      const emailId = emailResult?.data?.id || emailResult?.id;
-      if (!emailId) {
-        console.error('❌ Email response missing ID - email may not have been sent');
-        console.error('❌ Full response structure:', JSON.stringify(emailResult, null, 2));
-        return res.status(500).json({ 
-          error: 'Email service returned invalid response. Please check Resend API key and configuration.',
-          details: emailResult
-        });
-      }
-
       // Email sent successfully - NOW save OTP to database
+      const emailId = emailResult.messageId || `gmail-${Date.now()}`;
       console.log('✅ Email sent successfully with ID:', emailId);
       await db.collection('users').updateOne(
         { id: user.id },
@@ -242,36 +249,63 @@ export default async function handler(req, res) {
       console.error('❌ Email sending error:', emailError);
       console.error('❌ Email error type:', typeof emailError);
       console.error('❌ Email error message:', emailError?.message);
+      console.error('❌ Email error code:', emailError?.code);
+      console.error('❌ Email error command:', emailError?.command);
       console.error('❌ Email error response:', emailError?.response);
-      console.error('❌ Email error data:', emailError?.response?.data);
+      console.error('❌ Email error responseCode:', emailError?.responseCode);
       console.error('❌ Email error stack:', emailError?.stack);
       
-      // Handle Resend-specific errors
+      // Handle Nodemailer/Gmail SMTP errors
       let errorMessage = 'Failed to send email';
       let errorDetails = null;
 
-      if (emailError?.response?.data) {
-        errorDetails = emailError.response.data;
-        errorMessage = errorDetails.message || errorMessage;
+      // Extract detailed error information
+      if (emailError?.response) {
+        errorDetails = emailError.response;
+        errorMessage = typeof errorDetails === 'string' ? errorDetails : (errorDetails.message || errorMessage);
       } else if (emailError?.message) {
         errorMessage = emailError.message;
-        errorDetails = { message: emailError.message };
+        errorDetails = { 
+          message: emailError.message, 
+          code: emailError.code,
+          command: emailError.command,
+          responseCode: emailError.responseCode
+        };
       }
 
-      // Check for common Resend API errors
-      if (errorMessage.includes('API key') || errorMessage.includes('unauthorized')) {
-        errorMessage = 'Email service authentication failed. Please check RESEND_API_KEY configuration.';
-      } else if (errorMessage.includes('domain') || errorMessage.includes('sender')) {
-        errorMessage = 'Email sender domain not verified. Please verify your domain in Resend dashboard.';
+      // Check for common Gmail SMTP errors
+      const errorMsgLower = errorMessage.toLowerCase();
+      if (errorMsgLower.includes('invalid login') || 
+          errorMsgLower.includes('authentication failed') || 
+          errorMsgLower.includes('username and password not accepted') ||
+          emailError?.code === 'EAUTH' ||
+          emailError?.responseCode === 535) {
+        errorMessage = 'Email authentication failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in env.config.';
+      } else if (errorMsgLower.includes('connection') || 
+                 errorMsgLower.includes('econnrefused') ||
+                 emailError?.code === 'ECONNECTION' ||
+                 emailError?.code === 'ETIMEDOUT') {
+        errorMessage = 'Failed to connect to Gmail SMTP server. Please check your internet connection.';
+      } else if (errorMsgLower.includes('rate limit') || 
+                 errorMsgLower.includes('too many') ||
+                 emailError?.code === 'EENVELOPE') {
+        errorMessage = 'Email sending rate limit exceeded. Please try again later.';
+      } else if (errorMsgLower.includes('self signed certificate') ||
+                 errorMsgLower.includes('certificate')) {
+        errorMessage = 'SSL certificate error. Please check Gmail SMTP configuration.';
       }
 
+      // Return detailed error for debugging
       res.status(500).json({ 
         error: errorMessage,
         details: errorDetails,
         debug: process.env.NODE_ENV === 'development' ? {
-          hasApiKey: !!RESEND_API_KEY,
-          apiKeyLength: RESEND_API_KEY?.length || 0,
-          apiKeyPrefix: RESEND_API_KEY?.substring(0, 3) || 'N/A'
+          hasEmailUser: !!EMAIL_USER,
+          hasEmailPass: !!EMAIL_PASS,
+          emailUser: EMAIL_USER ? EMAIL_USER.substring(0, 3) + '***' : 'N/A',
+          errorCode: emailError?.code,
+          responseCode: emailError?.responseCode,
+          command: emailError?.command
         } : undefined
       });
     }

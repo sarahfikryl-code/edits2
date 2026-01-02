@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -33,16 +34,27 @@ function loadEnvConfig() {
 const envConfig = loadEnvConfig();
 const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'topphysics';
+const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'topphysics_secret';
+
+// Generate HMAC signature (same as verify-otp.js)
+function generateHMAC(id) {
+  const message = id + 'rest_pass_from_otp';
+  return crypto.createHmac('sha256', JWT_SECRET).update(message).digest('hex');
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { id, newPassword } = req.body;
+  const { id, newPassword, sig } = req.body;
 
   if (!id || !newPassword) {
     return res.status(400).json({ error: 'ID and new password are required' });
+  }
+
+  if (!sig) {
+    return res.status(400).json({ error: 'Signature is required. Please verify OTP first.' });
   }
 
   if (newPassword.length < 8) {
@@ -67,25 +79,36 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Verify OTP was cleared (authorization check)
-    const otpData = user.OTP_rest_password;
-    const isAuthorized = otpData && 
-                        (otpData.OTP === null || otpData.OTP === undefined) &&
-                        (otpData.OTP_Expiration_Date === null || otpData.OTP_Expiration_Date === undefined);
+    // Verify HMAC signature (authorization check)
+    // The signature itself proves that OTP was verified, since it's only generated after successful OTP verification
+    const expectedSig = generateHMAC(user.id.toString());
+    let isValid = false;
+    try {
+      isValid = crypto.timingSafeEqual(
+        Buffer.from(sig),
+        Buffer.from(expectedSig)
+      );
+    } catch (error) {
+      console.error('Signature verification error:', error);
+      return res.status(403).json({ error: 'Invalid signature format.' });
+    }
 
-    if (!isAuthorized) {
-      return res.status(403).json({ error: 'Unauthorized. Please verify OTP first.' });
+    if (!isValid) {
+      return res.status(403).json({ error: 'Unauthorized. Invalid signature. Please verify OTP first.' });
     }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
+    // Update password and clear OTP data
     await db.collection('users').updateOne(
       { id: user.id },
       {
         $set: {
-          password: hashedPassword
+          password: hashedPassword,
+          'OTP_rest_password.OTP': null,
+          'OTP_rest_password.OTP_Expiration_Date': null,
+          'OTP_rest_password.resend_expiration': null
         }
       }
     );

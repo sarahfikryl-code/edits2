@@ -372,6 +372,15 @@ export default function Login() {
   };
 
   const handleOtpKeyDown = (e, index) => {
+    // Handle Enter key to verify OTP
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const otpCode = otp.join('');
+      if (otpCode.length === 8 && !isVerifyingOtp) {
+        handleVerifyOtp();
+      }
+      return;
+    }
     // Handle backspace to move to previous input
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
       const prevInput = document.querySelector(`input[name="otp-${index - 1}"]`);
