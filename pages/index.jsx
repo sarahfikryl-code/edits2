@@ -329,12 +329,31 @@ export default function Login() {
   };
 
   const handleOtpChange = (index, value) => {
-    // Only allow numbers, single character
-    const sanitized = value.replace(/[^0-9]/g, '').slice(0, 1);
-    const newOtp = [...otp];
-    newOtp[index] = sanitized;
-    setOtp(newOtp);
-    setOtpError('');
+    // Check if pasted text (more than 1 character)
+    const sanitized = value.replace(/[^0-9]/g, '');
+    
+    if (sanitized.length > 1) {
+      // User pasted multiple characters - distribute them
+      const newOtp = [...otp];
+      for (let i = 0; i < sanitized.length && (index + i) < 8; i++) {
+        newOtp[index + i] = sanitized[i];
+      }
+      setOtp(newOtp);
+      setOtpError('');
+      
+      // Focus on the next empty input or last input
+      const nextIndex = Math.min(index + sanitized.length, 7);
+      setTimeout(() => {
+        const nextInput = document.querySelector(`input[name="otp-${nextIndex}"]`);
+        if (nextInput) nextInput.focus();
+      }, 0);
+    } else {
+      // Single character input
+      const newOtp = [...otp];
+      newOtp[index] = sanitized.slice(0, 1);
+      setOtp(newOtp);
+      setOtpError('');
+    }
   };
 
   const handleOtpPaste = (e, index) => {

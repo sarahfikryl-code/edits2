@@ -89,12 +89,31 @@ export default function OnlineSessions() {
 
   // Handle VVC input change
   const handleVVCChange = (index, value) => {
-    // Only allow alphanumeric characters, single character, preserve case
-    const sanitized = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 1);
-    const newVvc = [...vvc];
-    newVvc[index] = sanitized;
-    setVvc(newVvc);
-    setVvcError('');
+    // Check if pasted text (more than 1 character)
+    const sanitized = value.replace(/[^a-zA-Z0-9]/g, '');
+    
+    if (sanitized.length > 1) {
+      // User pasted multiple characters - distribute them
+      const newVvc = [...vvc];
+      for (let i = 0; i < sanitized.length && (index + i) < 9; i++) {
+        newVvc[index + i] = sanitized[i];
+      }
+      setVvc(newVvc);
+      setVvcError('');
+      
+      // Focus on the next empty input or last input
+      const nextIndex = Math.min(index + sanitized.length, 8);
+      setTimeout(() => {
+        const nextInput = document.querySelector(`input[name="vvc-${nextIndex}"]`);
+        if (nextInput) nextInput.focus();
+      }, 0);
+    } else {
+      // Single character input
+      const newVvc = [...vvc];
+      newVvc[index] = sanitized.slice(0, 1);
+      setVvc(newVvc);
+      setVvcError('');
+    }
   };
 
   // Handle VVC paste

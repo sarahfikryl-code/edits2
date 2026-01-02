@@ -94,12 +94,31 @@ export default function SignUp() {
   };
 
   const handleVACChange = (index, value) => {
-    // Only allow alphanumeric characters, single character
-    const sanitized = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 1);
-    const newVac = [...form.vac];
-    newVac[index] = sanitized;
-    setForm({ ...form, vac: newVac });
-    setError('');
+    // Check if pasted text (more than 1 character)
+    const sanitized = value.replace(/[^a-zA-Z0-9]/g, '');
+    
+    if (sanitized.length > 1) {
+      // User pasted multiple characters - distribute them
+      const newVac = [...form.vac];
+      for (let i = 0; i < sanitized.length && (index + i) < 7; i++) {
+        newVac[index + i] = sanitized[i];
+      }
+      setForm({ ...form, vac: newVac });
+      setError('');
+      
+      // Focus on the next empty input or last input
+      const nextIndex = Math.min(index + sanitized.length, 6);
+      setTimeout(() => {
+        const nextInput = document.querySelector(`input[name="vac-${nextIndex}"]`);
+        if (nextInput) nextInput.focus();
+      }, 0);
+    } else {
+      // Single character input
+      const newVac = [...form.vac];
+      newVac[index] = sanitized.slice(0, 1);
+      setForm({ ...form, vac: newVac });
+      setError('');
+    }
   };
 
   const handleVACPaste = (e, index) => {
