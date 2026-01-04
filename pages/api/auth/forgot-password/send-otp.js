@@ -193,7 +193,7 @@ export default async function handler(req, res) {
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #2C5281; padding: 0;">
             <div style="padding: 40px 30px; background-color: #2C5281;">
               <div style="text-align: center; margin-bottom: 30px;">
-                <img src="https://demosys.myvnc.com/logo.png" alt="Logo" style="width: 100px; height: 100px; margin: 0 auto; display: block;" />
+                <img src="https://demosys.myvnc.com/logo.png" alt="Logo" style="width: 100px; height: 100px; margin: 0 auto; display: block; border-radius: 10px;" />
               </div>
               <p style="color: white; font-size: 16px; margin: 0 0 20px 0;">Hi ${userName},</p>
               <p style="color: white; font-size: 16px; margin: 0 0 30px 0;">Welcome to the Demo Attendance System platform! To reset your password, please use this OTP code:</p>

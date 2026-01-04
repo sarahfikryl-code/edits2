@@ -4,11 +4,26 @@ import Title from "../../components/Title";
 import { Table, ScrollArea, Modal } from '@mantine/core';
 import { weeks } from "../../constants/weeks";
 import styles from '../../styles/TableScrollArea.module.css';
-import { useStudents, useStudent } from '../../lib/api/students';
+import { useStudents, useStudent, useStudentPublic } from '../../lib/api/students';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../../lib/axios';
 import Image from 'next/image';
+import { verifySignature } from '../../lib/hmac';
+import ChartTabs from '../../components/ChartTabs';
+
+// Helper function to check if user has token by making API call
+const hasToken = async () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const response = await fetch('/api/auth/me', {
+      credentials: 'include'
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+};
 
 export default function StudentInfo() {
   const containerRef = useRef(null);
@@ -18,68 +33,235 @@ export default function StudentInfo() {
   const [studentDeleted, setStudentDeleted] = useState(false);
   const [searchResults, setSearchResults] = useState([]); // Store multiple search results
   const [showSearchResults, setShowSearchResults] = useState(false); // Show/hide search results
+  const [isValidSignature, setIsValidSignature] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasAuthToken, setHasAuthToken] = useState(null);
   const router = useRouter();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsType, setDetailsType] = useState('absent');
   const [detailsWeeks, setDetailsWeeks] = useState([]);
   const [detailsTitle, setDetailsTitle] = useState('');
 
-  // Get all students for name-based search
-  const { data: allStudents } = useStudents();
+  // Check authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      const isAuthenticated = await hasToken();
+      setHasAuthToken(isAuthenticated);
+    };
+    checkAuth();
+  }, []);
+
+  // Handle URL parameters and HMAC verification
+  useEffect(() => {
+    if (!router.isReady || hasAuthToken === null) {
+      return;
+    }
+    
+    const { id, sig } = router.query;
+    
+    // Reset states quickly
+    setIsLoading(false);
+    setIsValidSignature(false);
+    setStudentId("");
+    
+    // Check if signature is provided in URL - verify it regardless of token status
+    if (sig) {
+      const studentIdFromUrl = String(id || '').trim();
+      const signature = String(sig).trim();
+      
+      // Validate parameters are not empty
+      if (!studentIdFromUrl || !signature) {
+        console.log('❌ Empty URL parameters with signature');
+        router.push('/student_not_found');
+        return;
+      }
+      
+      console.log('🔍 Verifying HMAC signature:', { studentIdFromUrl, signature, hasToken: hasAuthToken });
+      
+      try {
+        // Verify the signature
+        const isValid = verifySignature(studentIdFromUrl, signature);
+        
+        if (isValid) {
+          console.log('✅ HMAC signature is valid');
+          setStudentId(studentIdFromUrl);
+          setIsValidSignature(true);
+          
+          // If user has token, also set searchId to fetch via authenticated API
+          if (hasAuthToken) {
+            setSearchId(studentIdFromUrl);
+          }
+        } else {
+          console.log('❌ HMAC signature is invalid');
+          setIsValidSignature(false);
+          router.push('/student_not_found');
+        }
+      } catch (error) {
+        console.error('❌ Error verifying signature:', error);
+        setIsValidSignature(false);
+        router.push('/student_not_found');
+      }
+      return;
+    }
+    
+    // No signature in URL - handle based on token status
+    if (hasAuthToken) {
+      // If authenticated and have ID, put it in search bar
+      if (id) {
+        setStudentId(String(id));
+        setSearchId(String(id));
+      }
+      return;
+    }
+    
+    // No token and no signature - redirect to login
+    console.log('❌ No authentication token and no signature');
+    router.push('/');
+  }, [router.isReady, router.query.id, router.query.sig, router, hasAuthToken]);
+
+  // Get all students for name-based search (only if authenticated)
+  const { data: allStudents } = useStudents({}, { 
+    enabled: !!hasAuthToken,
+  });
   
-  // React Query hook with real-time updates - 5 second polling
+  // React Query hook with real-time updates
   const { data: student, isLoading: studentLoading, error: studentError, refetch: refetchStudent, isRefetching, dataUpdatedAt } = useStudent(searchId, { 
-    enabled: !!searchId,
-    // Refetch settings
-    refetchInterval: 30 * 60 * 1000, // Refetch every 30 minutes
-    refetchIntervalInBackground: false, // Don't refetch when tab is not active
+    enabled: !!searchId && !!hasAuthToken,
+    // Real-time settings for live updates
+    refetchInterval: 3 * 1000, // Refetch every 3 seconds for real-time updates
+    refetchIntervalInBackground: true, // Continue when tab is not active
     refetchOnWindowFocus: true, // Immediate update when switching back to tab
     refetchOnReconnect: true, // Refetch when reconnecting to internet
     staleTime: 0, // Always consider data stale to force refetch
-    gcTime: 1000, // Keep in cache for only 1 second
+    gcTime: 1000, // Keep in cache for 1 second
     refetchOnMount: true, // Always refetch when component mounts/page entered
+    retry: 2, // Retry twice for better reliability
+    retryDelay: 1000, // 1 second retry delay
   });
 
-  // Get student profile picture
-  const { data: profilePictureData, error: profilePictureError } = useQuery({
-    queryKey: ['student-profile-picture', searchId],
+  // Public student hook for HMAC access with real-time updates
+  const { data: publicStudent, isLoading: publicStudentLoading, error: publicStudentError, refetch: refetchPublicStudent } = useStudentPublic(studentId, router.query.sig, { 
+    enabled: !!studentId && !!isValidSignature && !!router.query.sig && !hasAuthToken,
+    // Real-time settings for live updates
+    refetchInterval: 3 * 1000, // Refetch every 3 seconds for real-time updates
+    refetchIntervalInBackground: true, // Continue when tab is not active
+    refetchOnWindowFocus: true, // Immediate update when switching back to tab
+    refetchOnReconnect: true, // Refetch when reconnecting to internet
+    staleTime: 0, // Always consider data stale to force refetch
+    gcTime: 1000, // Keep in cache for 1 second
+    refetchOnMount: true, // Always refetch when component mounts/page entered
+    retry: 2, // Retry twice for better reliability
+    retryDelay: 1000, // 1 second retry delay
+  });
+
+  // Determine which student data to use
+  const currentStudent = hasAuthToken ? student : publicStudent;
+  const currentStudentLoading = hasAuthToken ? studentLoading : publicStudentLoading;
+  const currentStudentError = hasAuthToken ? studentError : publicStudentError;
+
+  // Get student profile picture - use searchId if authenticated, studentId if public
+  const profilePictureStudentId = hasAuthToken ? searchId : studentId;
+  const profilePictureSignature = !hasAuthToken && isValidSignature && router.query.sig ? String(router.query.sig).trim() : null;
+  
+  // Debug logging for profile picture query
+  useEffect(() => {
+    if (profilePictureStudentId) {
+      console.log('🖼️ Profile Picture Query State:', {
+        profilePictureStudentId,
+        profilePictureSignature,
+        hasAuthToken,
+        isValidSignature,
+        routerSig: router.query.sig,
+        enabled: !!profilePictureStudentId && (hasAuthToken || (isValidSignature && !!router.query.sig))
+      });
+    }
+  }, [profilePictureStudentId, profilePictureSignature, hasAuthToken, isValidSignature, router.query.sig]);
+  
+  const { data: profilePictureData, error: profilePictureError, refetch: refetchProfilePicture } = useQuery({
+    queryKey: ['student-profile-picture', profilePictureStudentId, profilePictureSignature, isValidSignature, hasAuthToken],
     queryFn: async () => {
-      if (!searchId) return { url: null };
+      if (!profilePictureStudentId) {
+        console.log('❌ Profile picture query: No student ID');
+        return { url: null };
+      }
       try {
-        const response = await apiClient.get(`/api/profile-picture/student/${searchId}`);
-        console.log('📸 Profile picture API response:', response.data);
+        // Include signature in query params if public access
+        const url = profilePictureSignature 
+          ? `/api/profile-picture/student/${profilePictureStudentId}?sig=${encodeURIComponent(profilePictureSignature)}`
+          : `/api/profile-picture/student/${profilePictureStudentId}`;
+        console.log('📸 Profile picture API request:', { url, hasSignature: !!profilePictureSignature });
+        const response = await apiClient.get(url);
+        console.log('✅ Profile picture API response:', response.data);
         return response.data;
       } catch (err) {
-        console.error('❌ Profile picture API error:', err);
+        console.error('❌ Profile picture API error:', {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
+          url: err.config?.url
+        });
+        // Return null on error (401, 403, etc.) - profile picture is optional
         return { url: null };
       }
     },
-    enabled: !!searchId,
+    enabled: !!profilePictureStudentId && (hasAuthToken || (isValidSignature && !!router.query.sig)),
     staleTime: 50 * 60 * 1000, // 50 minutes
     retry: 1,
   });
 
+  // Refetch profile picture when signature validation completes
+  useEffect(() => {
+    if (!hasAuthToken && isValidSignature && profilePictureStudentId && router.query.sig && profilePictureData === undefined) {
+      console.log('🔄 Refetching profile picture after signature validation', {
+        isValidSignature,
+        profilePictureStudentId,
+        hasSig: !!router.query.sig,
+        currentData: profilePictureData
+      });
+      // Small delay to ensure state is fully updated
+      setTimeout(() => {
+        refetchProfilePicture();
+      }, 100);
+    }
+  }, [isValidSignature, hasAuthToken, profilePictureStudentId, router.query.sig, refetchProfilePicture, profilePictureData]);
+
   const profilePictureUrl = profilePictureData?.url || null;
 
-  // Get user email from users collection
-  const { data: userEmailData } = useQuery({
-    queryKey: ['user-email', searchId],
+  // Get user email from users collection - use searchId if authenticated, studentId if public
+  const emailStudentId = hasAuthToken ? searchId : studentId;
+  const emailSignature = !hasAuthToken && isValidSignature && router.query.sig ? String(router.query.sig).trim() : null;
+  const { data: userEmailData, refetch: refetchEmail } = useQuery({
+    queryKey: ['user-email', emailStudentId, emailSignature, isValidSignature, hasAuthToken],
     queryFn: async () => {
-      if (!searchId) return { email: null };
+      if (!emailStudentId) return { email: null };
       try {
-        const response = await apiClient.get(`/api/users/${searchId}/email`);
+        // Include signature in query params if public access
+        const url = emailSignature 
+          ? `/api/users/${emailStudentId}/email?sig=${encodeURIComponent(emailSignature)}`
+          : `/api/users/${emailStudentId}/email`;
+        const response = await apiClient.get(url);
         return response.data;
       } catch (err) {
         console.error('❌ User email API error:', err);
         return { email: null };
       }
     },
-    enabled: !!searchId,
+    enabled: !!emailStudentId && (hasAuthToken || (isValidSignature && !!router.query.sig)),
     staleTime: 50 * 60 * 1000, // 50 minutes
     retry: 1,
   });
 
   const userEmail = userEmailData?.email || null;
+
+  // Refetch email when signature validation completes
+  useEffect(() => {
+    if (!hasAuthToken && isValidSignature && emailStudentId && router.query.sig && userEmailData === undefined) {
+      console.log('🔄 Refetching email after signature validation');
+      setTimeout(() => {
+        refetchEmail();
+      }, 100);
+    }
+  }, [isValidSignature, hasAuthToken, emailStudentId, router.query.sig, refetchEmail, userEmailData]);
   
   // Debug logging
   useEffect(() => {
@@ -95,16 +277,18 @@ export default function StudentInfo() {
 
   // Debug logging for React Query status
   useEffect(() => {
-    if (student && searchId) {
+    if (currentStudent && (searchId || studentId)) {
       console.log('🔄 Student Info Page - Data Status:', {
-        studentId: searchId,
-        studentName: student.name,
+        studentId: searchId || studentId,
+        studentName: currentStudent.name,
         isRefetching,
         dataUpdatedAt: new Date(dataUpdatedAt).toLocaleTimeString(),
-        attendanceStatus: student.weeks?.[0]?.attended || false
+        attendanceStatus: currentStudent.weeks?.[0]?.attended || false,
+        hasAuthToken,
+        isPublicAccess: !hasAuthToken
       });
     }
-  }, [student, isRefetching, dataUpdatedAt, searchId]);
+  }, [currentStudent, isRefetching, dataUpdatedAt, searchId, studentId, hasAuthToken]);
 
   useEffect(() => {
     if (error && !studentDeleted) {
@@ -116,10 +300,10 @@ export default function StudentInfo() {
 
   // Handle student error
   useEffect(() => {
-    if (studentError) {
-      if (studentError.response?.status === 404) {
+    if (currentStudentError) {
+      if (currentStudentError.response?.status === 404) {
         console.log('❌ Student Info Page - Student not found:', {
-          searchId,
+          searchId: searchId || studentId,
           error: 'Student deleted or does not exist',
           timestamp: new Date().toLocaleTimeString()
         });
@@ -127,8 +311,8 @@ export default function StudentInfo() {
         setError("Student not exists - This student may have been deleted");
       } else {
         console.log('❌ Student Info Page - Error fetching student:', {
-          searchId,
-          error: studentError.message,
+          searchId: searchId || studentId,
+          error: currentStudentError.message || currentStudentError,
           timestamp: new Date().toLocaleTimeString()
         });
         setStudentDeleted(false);
@@ -136,12 +320,12 @@ export default function StudentInfo() {
       }
     } else {
       // Clear error when student data loads successfully
-      if (student && !studentError) {
+      if (currentStudent && !currentStudentError) {
         setStudentDeleted(false);
         setError("");
       }
     }
-  }, [studentError, searchId, student]);
+  }, [currentStudentError, searchId, currentStudent]);
 
   useEffect(() => {
     // Authentication is now handled by _app.js with HTTP-only cookies
@@ -221,14 +405,15 @@ export default function StudentInfo() {
 
   // Helper function to get attendance status for a week
   const getWeekAttendance = (weekNumber) => {
-    if (!student || !student.weeks) return { attended: false, hwDone: false, quizDegree: null, message_state: false, lastAttendance: null };
+    if (!currentStudent || !currentStudent.weeks) return { attended: false, hwDone: false, hwDegree: null, quizDegree: null, message_state: false, lastAttendance: null };
     
-    const weekData = student.weeks.find(w => w.week === weekNumber);
-    if (!weekData) return { attended: false, hwDone: false, quizDegree: null, message_state: false, lastAttendance: null };
+    const weekData = currentStudent.weeks.find(w => w.week === weekNumber);
+    if (!weekData) return { attended: false, hwDone: false, hwDegree: null, quizDegree: null, message_state: false, lastAttendance: null };
     
     return {
       attended: weekData.attended || false,
       hwDone: weekData.hwDone || false,
+      hwDegree: weekData.hwDegree || null,
       quizDegree: weekData.quizDegree || null,
       comment: weekData.comment || null,
       message_state: weekData.message_state || false,
@@ -238,15 +423,15 @@ export default function StudentInfo() {
 
   // Helper function to get available weeks (all weeks that exist in the database)
   const getAvailableWeeks = () => {
-    if (!student || !student.weeks || student.weeks.length === 0) return [];
+    if (!currentStudent || !currentStudent.weeks || currentStudent.weeks.length === 0) return [];
     
     // Return all weeks that exist in the database, sorted by week number
-    return student.weeks.sort((a, b) => a.week - b.week);
+    return currentStudent.weeks.sort((a, b) => a.week - b.week);
   };
 
   // Helper to compute totals for the student across all weeks
   const getTotals = () => {
-    const weeks = Array.isArray(student?.weeks) ? student.weeks : [];
+    const weeks = Array.isArray(currentStudent?.weeks) ? currentStudent.weeks : [];
     const absent = weeks.filter(w => w && w.attended === false).length;
     const missingHW = weeks.filter(w => w && (w.hwDone === false || w.hwDone === "Not Completed" || w.hwDone === "not completed" || w.hwDone === "NOT COMPLETED")).length;
     const unattendQuiz = weeks.filter(w => w && (w.quizDegree === "Didn't Attend The Quiz" || w.quizDegree == null)).length;
@@ -289,18 +474,18 @@ export default function StudentInfo() {
   };
 
   const openDetails = (type) => {
-    if (!student) return;
+    if (!currentStudent) return;
     let title = '';
     let weeksList = [];
     if (type === 'absent') {
-      title = `Absent Sessions for ${student.name} • ID: ${student.id}`;
-      weeksList = getAbsentWeeks(student.weeks);
+      title = `Absent Sessions for ${currentStudent.name} • ID: ${currentStudent.id}`;
+      weeksList = getAbsentWeeks(currentStudent.weeks);
     } else if (type === 'hw') {
-      title = `Missing Homework for ${student.name} • ID: ${student.id}`;
-      weeksList = getMissingHWWeeks(student.weeks);
+      title = `Missing Homework for ${currentStudent.name} • ID: ${currentStudent.id}`;
+      weeksList = getMissingHWWeeks(currentStudent.weeks);
     } else if (type === 'quiz') {
-      title = `Unattended Quizzes for ${student.name} • ID: ${student.id}`;
-      weeksList = getUnattendQuizWeeks(student.weeks);
+      title = `Unattended Quizzes for ${currentStudent.name} • ID: ${currentStudent.id}`;
+      weeksList = getUnattendQuizWeeks(currentStudent.weeks);
     }
     setDetailsType(type);
     setDetailsWeeks(weeksList);
@@ -399,10 +584,33 @@ export default function StudentInfo() {
             margin-top: 20px;
           }
           .student-details {
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 16px;
             margin-bottom: 30px;
+          }
+          
+          /* Only make last item full width if it's the only item */
+          .student-details .detail-item:only-child {
+            grid-column: 1 / -1;
+          }
+          
+          /* For last odd item: only make it full width if previous item is also odd */
+          /* This allows even-odd pairs (like items 2-3) to stay side by side */
+          /* Exclude position 3 (where previous is even) - they should pair */
+          /* Only apply to positions where previous is odd: 1, 5, 7, 9, etc. */
+          .student-details .detail-item:nth-child(1):last-child,
+          .student-details .detail-item:nth-child(5):last-child,
+          .student-details .detail-item:nth-child(7):last-child,
+          .student-details .detail-item:nth-child(9):last-child,
+          .student-details .detail-item:nth-child(11):last-child {
+            grid-column: 1 / -1;
+          }
+          
+          @media (max-width: 768px) {
+            .student-details {
+              grid-template-columns: 1fr;
+            }
           }
           .detail-item {
             padding: 20px;
@@ -477,152 +685,222 @@ export default function StudentInfo() {
           }
         `}</style>
 
-        <Title>Student Info</Title>
+        {/* Only show title if authenticated */}
+        {hasAuthToken && <Title>Student Info</Title>}
 
-        <div className="form-container">
-          <form onSubmit={handleIdSubmit} className="fetch-form">
-            <input
-              className="fetch-input"
-              type="text"
-              placeholder="Enter student ID or Name"
-              value={studentId}
-              onChange={handleIdChange}
-              required
-            />
-            <button type="submit" className="fetch-btn" disabled={studentLoading}>
-              {studentLoading ? "Loading..." : "🔍 Search"}
-        </button>
-          </form>
-          
-          {/* Show search results if multiple matches found */}
-          {showSearchResults && searchResults.length > 0 && (
-            <div style={{ 
-              marginTop: "16px", 
-              padding: "16px", 
-              background: "#f8f9fa", 
-              borderRadius: "8px", 
-              border: "1px solid #dee2e6" 
-            }}>
+        {/* Only show search form if authenticated */}
+        {hasAuthToken && (
+          <div className="form-container">
+            <form onSubmit={handleIdSubmit} className="fetch-form">
+              <input
+                className="fetch-input"
+                type="text"
+                placeholder="Enter Student ID, Name, Phone Number"
+                value={studentId}
+                onChange={handleIdChange}
+                required
+              />
+              <button type="submit" className="fetch-btn" disabled={currentStudentLoading}>
+                {currentStudentLoading ? "Loading..." : "🔍 Search"}
+              </button>
+            </form>
+            
+            {/* Show search results if multiple matches found */}
+            {showSearchResults && searchResults.length > 0 && (
               <div style={{ 
-                marginBottom: "12px", 
-                fontWeight: "600", 
-                color: "#495057" 
+                marginTop: "16px", 
+                padding: "16px", 
+                background: "#f8f9fa", 
+                borderRadius: "8px", 
+                border: "1px solid #dee2e6" 
               }}>
-                Select a student:
+                <div style={{ 
+                  marginBottom: "12px", 
+                  fontWeight: "600", 
+                  color: "#495057" 
+                }}>
+                  Select a student:
+                </div>
+                {searchResults.map((student) => (
+                  <button
+                    key={student.id}
+                    onClick={() => handleStudentSelect(student)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "12px 16px",
+                      margin: "8px 0",
+                      background: "white",
+                      border: "1px solid #dee2e6",
+                      borderRadius: "6px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease"
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = "#e9ecef";
+                      e.target.style.borderColor = "#1FA8DC";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = "white";
+                      e.target.style.borderColor = "#dee2e6";
+                    }}
+                  >
+                    <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
+                      {student.name} (ID: {student.id})
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "#495057", marginTop: 4 }}>
+                      <span style={{ fontFamily: 'monospace' }}>{student.phone || 'N/A'}</span>
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "#6c757d", marginTop: 2 }}>
+                      {student.grade} • {student.main_center}
+                    </div>
+                  </button>
+                ))}
               </div>
-              {searchResults.map((student) => (
-                <button
-                  key={student.id}
-                  onClick={() => handleStudentSelect(student)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: "12px 16px",
-                    margin: "8px 0",
-                    background: "white",
-                    border: "1px solid #dee2e6",
-                    borderRadius: "6px",
-                    textAlign: "left",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = "#e9ecef";
-                    e.target.style.borderColor = "#1FA8DC";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = "white";
-                    e.target.style.borderColor = "#dee2e6";
-                  }}
-                >
-                  <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
-                    {student.name} (ID: {student.id})
-                  </div>
-                  <div style={{ fontSize: "0.9rem", color: "#6c757d" }}>
-                    {student.grade} • {student.main_center}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
         
-        {student && !studentDeleted && (
+        {/* Welcome title for public access (no token) */}
+        {currentStudent && !studentDeleted && !hasAuthToken && (
+          <div style={{
+            textAlign: "center",
+            marginBottom: "24px"
+          }}>
+            <h1 style={{
+              fontSize: "2.5rem",
+              fontWeight: "700",
+              color: "white",
+              margin: "0",
+              textShadow: "0 2px 4px rgba(0,0,0,0.1)"
+            }}>
+              Welcome to Demo System!
+            </h1>
+          </div>
+        )}
+
+        {currentStudent && !studentDeleted && (
           <div className="info-container">
             <div className="student-details">
-              {/* Profile Picture Preview - Read Only */}
-              <div className="detail-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                <div className="detail-label" style={{ textAlign: 'center', width: '100%' }}>Profile Picture</div>
-                {profilePictureUrl ? (
-                  <div
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: '50%',
-                      background: '#e9ecef',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
-                      border: '2px solid #1FA8DC',
-                      overflow: 'hidden',
-                      position: 'relative'
-                    }}
-                  >
-                    <img
-                      src={profilePictureUrl}
-                      alt="Profile"
-                      onError={(e) => {
-                        console.error('❌ Image failed to load:', profilePictureUrl);
-                        e.target.style.display = 'none';
-                      }}
-                      onLoad={() => {
-                        console.log('✅ Image loaded successfully:', profilePictureUrl);
-                      }}
+              {/* Profile Picture Preview - Read Only - Full Row - Only show if authenticated */}
+              {hasAuthToken && (
+                <div className="detail-item" style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  gridColumn: '1 / -1'
+                }}>
+                  <div className="detail-label" style={{ textAlign: 'center', width: '100%' }}>Profile Picture</div>
+                  {profilePictureUrl ? (
+                    <div
                       style={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: '50%',
+                        background: '#e9ecef',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
+                        border: '2px solid #1FA8DC',
+                        overflow: 'hidden',
+                        position: 'relative'
+                      }}
+                    >
+                      <img
+                        src={profilePictureUrl}
+                        alt="Profile"
+                        onError={(e) => {
+                          console.error('❌ Image failed to load (404):', profilePictureUrl);
+                          // Hide the img element and show placeholder instead
+                          const container = e.target.closest('div');
+                          if (container) {
+                            e.target.style.display = 'none';
+                            // Show placeholder with first letter
+                            const placeholder = document.createElement('span');
+                            placeholder.style.cssText = `
+                              fontWeight: 700;
+                              fontSize: 36;
+                              color: #adb5bd;
+                              display: flex;
+                              alignItems: center;
+                              justifyContent: center;
+                              width: 100%;
+                              height: 100%;
+                              lineHeight: 1;
+                              textAlign: center;
+                            `;
+                            placeholder.textContent = currentStudent?.name && currentStudent.name.length > 0 
+                              ? currentStudent.name[0].toUpperCase() 
+                              : '?';
+                            container.appendChild(placeholder);
+                          }
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Image loaded successfully:', profilePictureUrl);
+                        }}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          borderRadius: '50%'
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: '50%',
+                        background: '#e9ecef',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
+                        border: '2px solid #e9ecef',
+                        position: 'relative'
+                      }}
+                    >
+                      <span style={{ 
+                        fontWeight: 700, 
+                        fontSize: 36, 
+                        color: '#adb5bd',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         width: '100%',
                         height: '100%',
-                        objectFit: 'cover',
-                        borderRadius: '50%'
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: '50%',
-                      background: '#e9ecef',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
-                      border: '2px solid #e9ecef',
-                      position: 'relative'
-                    }}
-                  >
-                    <span style={{ 
-                      fontWeight: 700, 
-                      fontSize: 36, 
-                      color: '#adb5bd',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '100%',
-                      height: '100%',
-                      lineHeight: 1,
-                      textAlign: 'center'
-                    }}>
-                      {student.name && student.name.length > 0 ? student.name[0].toUpperCase() : '?'}
-                    </span>
-                  </div>
-                )}
-              </div>
+                        lineHeight: 1,
+                        textAlign: 'center'
+                      }}>
+                        {currentStudent?.name && currentStudent.name.length > 0 ? currentStudent.name[0].toUpperCase() : '?'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
+              {/* Only show Student ID if user doesn't have token */}
+              {!hasAuthToken && (
+                <div className="detail-item">
+                  <div className="detail-label">Student ID</div>
+                  <div className="detail-value">{currentStudent.id}</div>
+                </div>
+              )}
               <div className="detail-item">
-                <div className="detail-label">Full Name</div>
-                <div className="detail-value">{student.name}</div>
+                <div className="detail-label">Student Name</div>
+                <div className="detail-value">{currentStudent.name}</div>
+              </div>
+              <div className="detail-item">
+                <div className="detail-label">Student Phone</div>
+                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{currentStudent.phone}</div>
+              </div>
+              <div className="detail-item">
+                <div className="detail-label">Parent's Phone</div>
+                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{currentStudent.parents_phone || currentStudent.parentsPhone || 'N/A'}</div>
               </div>
               {userEmail && (
                 <div className="detail-item">
@@ -630,48 +908,80 @@ export default function StudentInfo() {
                   <div className="detail-value" style={{ fontFamily: 'monospace' }}>{userEmail}</div>
                 </div>
               )}
-              {student.age && (
-                <div className="detail-item">
-                  <div className="detail-label">Age</div>
-                  <div className="detail-value">{student.age}</div>
-                </div>
-              )}
-              <div className="detail-item">
-                <div className="detail-label">Grade</div>
-                <div className="detail-value">{student.grade}</div>
-              </div>
               <div className="detail-item">
                 <div className="detail-label">School</div>
-                <div className="detail-value">{student.school || 'N/A'}</div>
+                <div className="detail-value">{currentStudent.school || 'N/A'}</div>
               </div>
-              <div className="detail-item">
-                <div className="detail-label">Student Phone</div>
-                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{student.phone}</div>
-              </div>
-              <div className="detail-item">
-                <div className="detail-label">Parent's Phone</div>
-                <div className="detail-value" style={{ fontFamily: 'monospace' }}>{student.parents_phone}</div>
-              </div>
-              <div className="detail-item">
-                <div className="detail-label">Main Center</div>
-                <div className="detail-value">{student.main_center}</div>
-              </div>
-              {student.main_comment && (
-              <div className="detail-item">
-                <div className="detail-label">Main Comment</div>
-                <div className="detail-value" style={{ fontSize: '1rem' }}>{student.main_comment}</div>
-              </div>
+              {currentStudent?.address && (
+                <div className="detail-item">
+                  <div className="detail-label">Address</div>
+                  <div className="detail-value">{currentStudent.address || 'N/A'}</div>
+                </div>
               )}
               <div className="detail-item">
-                <div className="detail-label">Account Status</div>
-                <div className="detail-value" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
-                  {student.account_state === 'Deactivated' ? (
-                    <span style={{ color: '#dc3545' }}>❌ Deactivated</span>
-                  ) : (
-                    <span style={{ color: '#28a745' }}>✅ Activated</span>
-                  )}
-                </div>
+                <div className="detail-label">Main Center</div>
+                <div className="detail-value">{currentStudent.main_center}</div>
               </div>
+              <div className="detail-item">
+                <div className="detail-label">Grade</div>
+                <div className="detail-value">{currentStudent.grade || currentStudent.course || 'N/A'}</div>
+              </div>
+              {currentStudent?.courseType && (
+                <div className="detail-item">
+                  <div className="detail-label">Course Type</div>
+                  <div className="detail-value">{currentStudent.courseType || 'N/A'}</div>
+                </div>
+              )}
+              {hasAuthToken && currentStudent?.payment?.numberOfSessions !== undefined && (
+                <div className="detail-item">
+                  <div className="detail-label">Available Number of Sessions</div>
+                  <div className="detail-value" style={{ 
+                    color: (currentStudent.payment?.numberOfSessions || 0) <= 2 ? '#dc3545' : '#212529',
+                    fontWeight: 'bold',
+                    fontSize: '16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontFamily: 'system-ui, -apple-system, sans-serif'
+                  }}>
+                    <span style={{ 
+                      fontSize: '18px', 
+                      fontWeight: '800',
+                      lineHeight: '1.2'
+                    }}>
+                      {(currentStudent.payment?.numberOfSessions || 0)}
+                    </span>
+                    <span style={{ 
+                      fontSize: '17px', 
+                      fontWeight: '600',
+                      opacity: '0.9',
+                      textTransform: 'lowercase'
+                    }}>
+                      sessions
+                    </span>
+                  </div>
+                </div>
+              )}
+              {hasAuthToken && (
+                <div className="detail-item">
+                  <div className="detail-label">Hidden Comment</div>
+                  <div className="detail-value" style={{ fontSize: '1rem' }}>
+                    {currentStudent.main_comment || 'No Comment'}
+                  </div>
+                </div>
+              )}
+              {hasAuthToken && (
+                <div className="detail-item">
+                  <div className="detail-label">Account Status</div>
+                  <div className="detail-value" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+                    {currentStudent.account_state === 'Deactivated' ? (
+                      <span style={{ color: '#dc3545' }}>❌ Deactivated</span>
+                    ) : (
+                      <span style={{ color: '#28a745' }}>✅ Activated</span>
+                    )}
+                  </div>
+                </div>
+              )}
               {(() => {
                 const totals = getTotals();
                 return (
@@ -693,7 +1003,7 @@ export default function StudentInfo() {
               })()}
             </div>
             
-            <div className="weeks-title">All Weeks Records - Available Weeks ({getAvailableWeeks().length} weeks)</div>
+            <div className="weeks-title">All Weeks Records - Available Weeks ({getAvailableWeeks().length} {getAvailableWeeks().length === 1 ? 'week' : 'weeks'})</div>
             {getAvailableWeeks().length === 0 ? (
               <div style={{
                 textAlign: 'center',
@@ -708,7 +1018,7 @@ export default function StudentInfo() {
                 📋 No weeks records found for this student
               </div>
             ) : (
-              <ScrollArea h={400} type="hover" className={styles.scrolled}>
+              <ScrollArea h="calc(30rem * var(--mantine-scale))" type="hover" className={styles.scrolled}>
                 <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: '950px' }}>
                   <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
                     <Table.Tr>
@@ -755,6 +1065,15 @@ export default function StudentInfo() {
                                   fontSize: '1rem'
                                 }}>⚠️ Not Completed</span>;
                               } else if (weekData.hwDone === true) {
+                                // Show homework degree if it exists
+                                const hwDegree = weekData.hwDegree;
+                                if (hwDegree && String(hwDegree).trim() !== '') {
+                                  return <span style={{ 
+                                    color: '#28a745',
+                                    fontWeight: 'bold',
+                                    fontSize: '1rem'
+                                  }}>✅ Done ({hwDegree})</span>;
+                                }
                                 return <span style={{ 
                                   color: '#28a745',
                                   fontWeight: 'bold',
@@ -812,6 +1131,16 @@ export default function StudentInfo() {
                 </Table>
               </ScrollArea>
             )}
+          </div>
+        )}
+        
+        {/* Charts Tabs Section - Separate Container */}
+        {currentStudent && !studentDeleted && (
+          <div className="info-container" style={{ marginTop: '24px' }}>
+            <ChartTabs 
+              studentId={currentStudent.id} 
+              hasAuthToken={hasAuthToken} 
+            />
           </div>
         )}
         
@@ -1203,3 +1532,4 @@ export default function StudentInfo() {
 
 // Modal rendering
 // Keep component-level return uncluttered by adding modal just before closing tags
+

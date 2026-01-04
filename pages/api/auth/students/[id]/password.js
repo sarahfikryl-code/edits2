@@ -7,7 +7,28 @@ import { authMiddleware } from '../../../../../lib/authMiddleware';
 // Load environment variables from env.config
 function loadEnvConfig() {
   try {
-    const envPath = path.join(process.cwd(), '..', '..', '..', 'env.config');
+    // Try multiple possible paths for env.config
+    const possiblePaths = [
+      path.join(process.cwd(), '..', 'env.config'), // From frontend folder
+      path.join(process.cwd(), '..', '..', 'env.config'), // From frontend/pages
+      path.join(process.cwd(), '..', '..', '..', 'env.config'), // From frontend/pages/api
+      path.join(process.cwd(), '..', '..', '..', '..', 'env.config'), // From frontend/pages/api/auth
+      path.join(process.cwd(), '..', '..', '..', '..', '..', 'env.config'), // From frontend/pages/api/auth/students
+      path.join(process.cwd(), '..', '..', '..', '..', '..', '..', 'env.config'), // From frontend/pages/api/auth/students/[id]
+    ];
+    
+    let envPath = null;
+    for (const testPath of possiblePaths) {
+      if (fs.existsSync(testPath)) {
+        envPath = testPath;
+        break;
+      }
+    }
+    
+    if (!envPath) {
+      throw new Error('env.config file not found in any expected location');
+    }
+    
     const envContent = fs.readFileSync(envPath, 'utf8');
     const envVars = {};
 
@@ -18,7 +39,10 @@ function loadEnvConfig() {
         if (index !== -1) {
           const key = trimmed.substring(0, index).trim();
           let value = trimmed.substring(index + 1).trim();
-          value = value.replace(/^"|"$/g, ''); // strip quotes
+          // Remove quotes if present
+          if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
           envVars[key] = value;
         }
       }
@@ -26,7 +50,7 @@ function loadEnvConfig() {
 
     return envVars;
   } catch (error) {
-    console.log('⚠️  Could not read env.config, using process.env as fallback');
+    console.log('⚠️  Could not read env.config, using process.env as fallback:', error.message);
     return {};
   }
 }
@@ -62,8 +86,14 @@ export default async function handler(req, res) {
 
     let client;
     try {
-      client = await MongoClient.connect(MONGO_URI);
+      // Connect to MongoDB with proper error handling
+      client = await MongoClient.connect(MONGO_URI, {
+        serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      });
       const db = client.db(DB_NAME);
+
+      // Test connection by pinging the database
+      await db.admin().ping();
 
       // Check if student account exists in users collection
       const userAccount = await db.collection('users').findOne({ 

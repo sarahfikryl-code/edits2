@@ -161,6 +161,7 @@ export default async function handler(req, res) {
             center: { $ifNull: ['$weekData.lastAttendanceCenter', 'n/a'] },
             attendanceDate: { $ifNull: ['$weekData.lastAttendance', 'n/a'] },
             hwDone: { $ifNull: ['$weekData.hwDone', false] },
+            hwDegree: { $ifNull: ['$weekData.hwDegree', null] },
             quizDegree: { $ifNull: ['$weekData.quizDegree', null] },
             message_state: { $ifNull: ['$weekData.message_state', false] }
           }

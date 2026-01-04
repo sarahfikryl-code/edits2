@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
+import { verifySignature } from '../../../../lib/hmac';
 
 function loadEnvConfig() {
   try {
@@ -38,26 +39,42 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { id } = req.query;
+  const { id, sig } = req.query;
   const student_id = parseInt(id);
 
   let client;
+  let isPublicAccess = false;
+
   try {
     client = await MongoClient.connect(MONGO_URI);
     const db = client.db(DB_NAME);
     
-    // Verify authentication - allow students to view their own results, or admins/assistants/developers to view any student
-    const user = await authMiddleware(req);
-    const userId = user.assistant_id || user.id; // JWT contains assistant_id for students
-    
-    // Students can only view their own results
-    if (user.role === 'student' && userId !== student_id) {
-      return res.status(403).json({ error: 'Forbidden: You can only view your own results' });
+    // Check if this is a public access request (with HMAC signature)
+    if (sig) {
+      const studentIdFromQuery = String(id || '').trim();
+      const signature = String(sig).trim();
+      if (studentIdFromQuery && signature && verifySignature(studentIdFromQuery, signature)) {
+        isPublicAccess = true;
+      } else {
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
     }
-    
-    // Admins, assistants, and developers can view any student's results
-    if (!['student', 'admin', 'assistant', 'developer'].includes(user.role)) {
-      return res.status(403).json({ error: 'Forbidden: Access denied' });
+
+    // If not public access, verify authentication
+    if (!isPublicAccess) {
+      // Verify authentication - allow students to view their own results, or admins/assistants/developers to view any student
+      const user = await authMiddleware(req);
+      const userId = user.assistant_id || user.id; // JWT contains assistant_id for students
+      
+      // Students can only view their own results
+      if (user.role === 'student' && userId !== student_id) {
+        return res.status(403).json({ error: 'Forbidden: You can only view your own results' });
+      }
+      
+      // Admins, assistants, and developers can view any student's results
+      if (!['student', 'admin', 'assistant', 'developer'].includes(user.role)) {
+        return res.status(403).json({ error: 'Forbidden: Access denied' });
+      }
     }
 
     // Get student data
@@ -76,7 +93,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Get all homework results
+    // Get all homework results from online_homeworks
     const onlineHomeworks = student.online_homeworks || [];
     
     // Create a map of homework_id to result data (percentage and result string)
@@ -104,6 +121,30 @@ export default async function handler(req, res) {
       }
     });
 
+    // Fallback: If online_homeworks is empty, load from weeks array
+    const weeks = student.weeks || [];
+    if (onlineHomeworks.length === 0 && weeks.length > 0) {
+      weeks.forEach(weekData => {
+        if (weekData.week && weekData.hwDegree) {
+          // Parse hwDegree format like "3 / 3" or "8 / 10"
+          const hwDegreeStr = String(weekData.hwDegree).trim();
+          const match = hwDegreeStr.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+          
+          if (match) {
+            const obtained = parseFloat(match[1]);
+            const total = parseFloat(match[2]);
+            const percentage = total > 0 ? Math.round((obtained / total) * 100) : 0;
+            const result = hwDegreeStr; // Keep original format "3 / 3"
+            
+            // Store by week number as key
+            if (!resultMap[`week_${weekData.week}`]) {
+              resultMap[`week_${weekData.week}`] = { percentage, result };
+            }
+          }
+        }
+      });
+    }
+
     // Get ALL homeworks for this student's grade (not just completed ones)
     const normalizedStudentGrade = studentGrade.toLowerCase().replace(/\./g, '').trim();
     const allHomeworks = await db.collection('homeworks').find({}).toArray();
@@ -124,7 +165,12 @@ export default async function handler(req, res) {
       // Normalize homework._id to string for matching
       const hwIdStr = homework._id.toString();
       // Find result data - should match since we stored both formats
-      const resultData = resultMap[hwIdStr];
+      let resultData = resultMap[hwIdStr];
+      
+      // If no result from online_homeworks, check weeks fallback
+      if (!resultData) {
+        resultData = resultMap[`week_${week}`];
+      }
       
       if (!weekDataMap[week]) {
         weekDataMap[week] = {
@@ -148,6 +194,31 @@ export default async function handler(req, res) {
         }
       }
     });
+
+    // If no homeworks found but weeks data exists, add weeks data directly
+    if (filteredHomeworks.length === 0 && weeks.length > 0) {
+      weeks.forEach(weekData => {
+        if (weekData.week && weekData.hwDegree) {
+          const hwDegreeStr = String(weekData.hwDegree).trim();
+          const match = hwDegreeStr.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+          
+          if (match) {
+            const obtained = parseFloat(match[1]);
+            const total = parseFloat(match[2]);
+            const percentage = total > 0 ? Math.round((obtained / total) * 100) : 0;
+            
+            if (!weekDataMap[weekData.week]) {
+              weekDataMap[weekData.week] = {
+                weekNumber: weekData.week,
+                week: `Week ${weekData.week}`,
+                percentage: percentage,
+                result: hwDegreeStr
+              };
+            }
+          }
+        }
+      });
+    }
 
     // Convert to array and sort by week number
     const chartData = Object.values(weekDataMap)

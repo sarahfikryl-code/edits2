@@ -334,7 +334,6 @@ export default function CentersSchedule() {
           .schedule-container {
             margin: 20px auto !important;
             padding: 20px 5px 20px 5px !important;
-            max-width: 95% !important;
           }
           
           .schedule-table {

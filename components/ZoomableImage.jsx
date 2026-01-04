@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { IconZoomIn, IconZoomOut, IconX } from '@tabler/icons-react';
+import { Image } from '@mantine/core';
 
 export default function ZoomableImage({ src, alt = 'Question Image', style = {} }) {
   const [zoom, setZoom] = useState(1);
@@ -311,7 +312,7 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
             setIsDragging(false);
           }}
         >
-          <img
+          <Image
             src={src}
             alt={alt}
             className="zoomable-image"
@@ -525,9 +526,10 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
               }}
               onMouseDown={handleMouseDown}
             >
-              <img
+              <Image
                 src={src}
                 alt={alt}
+                radius="md"
                 style={{
                   maxWidth: '100%',
                   maxHeight: '100%',
@@ -535,7 +537,6 @@ export default function ZoomableImage({ src, alt = 'Question Image', style = {} 
                   transformOrigin: 'center center',
                   transition: zoom === 1 ? 'transform 0.3s ease' : 'none',
                   userSelect: 'none',
-                  borderRadius: '8px',
                   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
                   display: 'block'
                 }}

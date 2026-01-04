@@ -14,6 +14,20 @@ export default function PreviewHomeworkDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const [questionImages, setQuestionImages] = useState({});
 
+  // Redirect if required IDs are not provided
+  useEffect(() => {
+    if (router.isReady) {
+      if (!student_id || !homework_id) {
+        if (student_id) {
+          router.replace(`/dashboard/manage_online_system/preview_student_homeworks?student_id=${student_id}`);
+        } else {
+          router.replace('/dashboard/manage_online_system/preview_student_homeworks');
+        }
+        return;
+      }
+    }
+  }, [router.isReady, student_id, homework_id, router]);
+
   useEffect(() => {
     if (!student_id || !homework_id) return;
 
@@ -187,7 +201,7 @@ export default function PreviewHomeworkDetails() {
         <div className="details-container" style={{
           background: 'white',
           borderRadius: '16px',
-          padding: '24px',
+          padding: '15px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
         }}>
           <div style={{
@@ -263,9 +277,8 @@ export default function PreviewHomeworkDetails() {
                 <div
                   key={idx}
                   style={{
-                    border: '2px solid #e9ecef',
-                    borderRadius: '12px',
-                    padding: '20px',
+                    borderTop: '2px solid #e9ecef',
+                    padding: '15px 0px',
                     backgroundColor: '#fff'
                   }}
                 >

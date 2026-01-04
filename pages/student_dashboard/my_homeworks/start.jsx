@@ -21,6 +21,7 @@ export default function HomeworkStart() {
   const warningTimeoutRef = useRef(null);
   const warningShownRef = useRef(false);
   const isSubmittingRef = useRef(false); // Prevent duplicate submissions
+  const startTimeRef = useRef(null); // Store start time as timestamp (milliseconds)
   const { data: profile } = useProfile();
 
   // Format date as MM/DD/YYYY at hour:minute:second AM/PM
@@ -39,6 +40,14 @@ export default function HomeworkStart() {
     
     return `${month}/${day}/${year} at ${hoursStr}:${minutes}:${seconds} ${ampm}`;
   };
+
+  // Redirect if no ID is provided
+  useEffect(() => {
+    if (router.isReady && !id) {
+      router.replace('/student_dashboard/my_homeworks');
+      return;
+    }
+  }, [router.isReady, id, router]);
 
   // Check if homework is already completed and fetch homework data
   useEffect(() => {
@@ -77,9 +86,21 @@ export default function HomeworkStart() {
           
           setHomework(hw);
           
-          // Store start date in sessionStorage
-          const startDate = formatDate(new Date());
-          sessionStorage.setItem(`homework_${id}_date_of_start`, startDate);
+          // Store start time as timestamp (milliseconds) - only set once
+          if (!startTimeRef.current) {
+            const startTimestamp = Date.now();
+            startTimeRef.current = startTimestamp;
+            // Also store formatted date for display/backward compatibility
+            const startDate = formatDate(new Date(startTimestamp));
+            sessionStorage.setItem(`homework_${id}_date_of_start`, startDate);
+            sessionStorage.setItem(`homework_${id}_start_timestamp`, startTimestamp.toString());
+          } else {
+            // Restore from sessionStorage if exists
+            const savedTimestamp = sessionStorage.getItem(`homework_${id}_start_timestamp`);
+            if (savedTimestamp) {
+              startTimeRef.current = parseInt(savedTimestamp, 10);
+            }
+          }
           
           // Initialize timer if exists
           if (hw.timer) {
@@ -179,6 +200,7 @@ export default function HomeworkStart() {
             sessionStorage.removeItem(`homework_${id}_timeRemaining`);
             sessionStorage.removeItem(`homework_${id}_selectedAnswers`);
             sessionStorage.removeItem(`homework_${id}_date_of_start`);
+            sessionStorage.removeItem(`homework_${id}_start_timestamp`);
           }
           // Save result and redirect (only if not already submitting)
           if (!isSubmittingRef.current) {
@@ -345,9 +367,25 @@ export default function HomeworkStart() {
         }
       });
 
-      // Get dates
-      const startDate = sessionStorage.getItem(`homework_${id}_date_of_start`) || formatDate(new Date());
-      const endDate = formatDate(new Date());
+      // Get dates - ensure start time is always before end time
+      let startTimestamp = startTimeRef.current;
+      
+      // Fallback: try to get from sessionStorage if ref is null
+      if (!startTimestamp) {
+        const savedTimestamp = sessionStorage.getItem(`homework_${id}_start_timestamp`);
+        if (savedTimestamp) {
+          startTimestamp = parseInt(savedTimestamp, 10);
+        } else {
+          // Last resort: use current time minus 1 second to ensure it's different
+          startTimestamp = Date.now() - 1000;
+        }
+      }
+      
+      // Ensure end time is at least 1 second after start time
+      const endTimestamp = Math.max(Date.now(), startTimestamp + 1000);
+      
+      const startDate = formatDate(new Date(startTimestamp));
+      const endDate = formatDate(new Date(endTimestamp));
       sessionStorage.setItem(`homework_${id}_date_of_end`, endDate);
 
       // Save result to database (no questions_order needed - use homework_id to fetch questions)
@@ -515,29 +553,37 @@ export default function HomeworkStart() {
         </div>
       )}
 
-      {/* Question Container */}
-      <div className="question-container" style={{
+      {/* Question and Navigation Container */}
+      <div style={{
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
         justifyContent: "center",
-        padding: "20px 0",
-        overflow: "auto",
-        maxWidth: "900px",
-        width: "100%",
-        margin: "0 auto"
+        alignItems: "center",
+        width: "100%"
       }}>
-        <div className="question-card" style={{
-          background: "linear-gradient(135deg,rgb(63, 58, 58) 0%,rgb(87, 81, 81) 100%)",
-          borderRadius: "20px",
-          padding: "40px",
+        {/* Question Container */}
+        <div className="question-container" style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px 0",
+          overflow: "auto",
+          maxWidth: "900px",
           width: "100%",
-          maxWidth: "850px",
-          boxShadow: "0 8px 32px rgba(31, 168, 220, 0.15)",
-          border: "2px solid #e9ecef",
-          transition: "all 0.3s ease"
+          margin: "0 auto"
         }}>
+          <div className="question-card" style={{
+            background: "linear-gradient(135deg,rgb(63, 58, 58) 0%,rgb(87, 81, 81) 100%)",
+            borderRadius: "20px",
+            padding: "40px",
+            width: "100%",
+            maxWidth: "850px",
+            boxShadow: "0 8px 32px rgba(31, 168, 220, 0.15)",
+            border: "2px solid #e9ecef",
+            marginBottom: "24px"
+          }}>
           {/* Question Number */}
           <div className="question-number" style={{ 
             display: "flex",
@@ -562,6 +608,7 @@ export default function HomeworkStart() {
           {/* Question Image - Required */}
           {currentQuestion.question_picture && imageUrls[currentQuestion.question_picture] ? (
             <ZoomableImage
+              key={`question-${currentQuestionIndex}-${currentQuestion.question_picture}`}
               src={imageUrls[currentQuestion.question_picture]}
               alt="Question Image"
             />
@@ -605,7 +652,6 @@ export default function HomeworkStart() {
                     backgroundColor: isSelected ? "linear-gradient(135deg, #f0fff4 0%, #e8f5e9 100%)" : "#fff",
                     background: isSelected ? "linear-gradient(135deg, #f0fff4 0%, #e8f5e9 100%)" : "#fff",
                     cursor: "pointer",
-                    transition: "all 0.3s ease",
                     boxShadow: isSelected ? "0 4px 12px rgba(40, 167, 69, 0.2)" : "0 2px 8px rgba(0, 0, 0, 0.05)"
                   }}
                   onMouseEnter={(e) => {
@@ -664,7 +710,9 @@ export default function HomeworkStart() {
         alignItems: "center",
         gap: "12px",
         flexWrap: "wrap",
-        padding: "20px 0"
+        padding: "20px 0",
+        maxWidth: "500px",
+        margin: "0 auto"
       }}>
         {!isFirstQuestion && (
           <button
@@ -681,7 +729,9 @@ export default function HomeworkStart() {
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              transition: "all 0.2s ease"
+              flex: "1 1 calc(50% - 6px)",
+              minWidth: "140px",
+              maxWidth: "244px"
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = "#5a6268";
@@ -718,7 +768,9 @@ export default function HomeworkStart() {
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              transition: "all 0.2s ease"
+              flex: isFirstQuestion ? "1 1 100%" : "1 1 calc(50% - 6px)",
+              minWidth: "140px",
+              maxWidth: isFirstQuestion ? "500px" : "244px"
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = "#0056b3";
@@ -758,8 +810,10 @@ export default function HomeworkStart() {
               boxShadow: isSubmitting 
                 ? "0 2px 8px rgba(108, 117, 125, 0.3)"
                 : "0 4px 16px rgba(40, 167, 69, 0.3)",
-              transition: "all 0.2s ease",
-              opacity: isSubmitting ? 0.7 : 1
+              opacity: isSubmitting ? 0.7 : 1,
+              flex: isFirstQuestion ? "1 1 100%" : "1 1 calc(50% - 6px)",
+              minWidth: "140px",
+              maxWidth: isFirstQuestion ? "500px" : "244px"
             }}
             onMouseEnter={(e) => {
               if (!isSubmitting) {
@@ -777,6 +831,7 @@ export default function HomeworkStart() {
             {isSubmitting ? "Submitting..." : "Submit"}
           </button>
         )}
+      </div>
       </div>
 
       <style jsx>{`
@@ -811,13 +866,12 @@ export default function HomeworkStart() {
           }
           
           .question-container {
-            padding: 16px !important;
             max-width: 100% !important;
           }
           
           .question-card {
             padding: 24px !important;
-            border-radius: 12px !important;
+            border-radius: 25px !important;
           }
           
           .question-number {
@@ -851,7 +905,6 @@ export default function HomeworkStart() {
           }
           
           .navigation-buttons button {
-            padding: 8px 16px !important;
             font-size: 0.9rem !important;
           }
         }
@@ -888,13 +941,9 @@ export default function HomeworkStart() {
             margin-top: 8px !important;
           }
           
-          .question-container {
-            padding: 12px !important;
-          }
-          
           .question-card {
             padding: 16px !important;
-            border-radius: 10px !important;
+            border-radius: 25px !important;
           }
           
           .question-number {
@@ -927,12 +976,9 @@ export default function HomeworkStart() {
           .navigation-buttons {
             padding: 12px 0 !important;
             gap: 8px !important;
-            flex-direction: column !important;
           }
           
           .navigation-buttons button {
-            width: 100% !important;
-            padding: 10px 16px !important;
             font-size: 0.9rem !important;
             justify-content: center !important;
           }

@@ -722,6 +722,14 @@ export default function History() {
                                 fontWeight: 'bold'
                               }}>⚠️ Not Completed</span>;
                             } else if (record.hwDone === true) {
+                              // Show homework degree if it exists
+                              const hwDegree = record.hwDegree;
+                              if (hwDegree && String(hwDegree).trim() !== '') {
+                                return <span style={{ 
+                                  color: '#28a745',
+                                  fontWeight: 'bold'
+                                }}>✅ Done ({hwDegree})</span>;
+                              }
                               return <span style={{ 
                                 color: '#28a745',
                                 fontWeight: 'bold'

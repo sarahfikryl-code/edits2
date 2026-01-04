@@ -15,529 +15,6 @@ import CustomHeader from "../components/publicHeader";
 
 // PWA Service Worker Registration handled by next-pwa
 
-// DevTools Protection Component (only active in production)
-function DevToolsProtection({ userRole }) {
-  const router = useRouter();
-  const [devToolsDetected, setDevToolsDetected] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [timer, setTimer] = useState(15);
-
-  // Check if on login page
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-  const isLoginPage = currentPath === '/';
-
-  // Check if user is developer
-  const isDeveloper = userRole === 'developer';
-
-  useEffect(() => {
-    // Skip protection for developers
-    if (isDeveloper) {
-      return;
-    }
-
-    // Disable right-click (but allow left-click) - only for non-developers
-    const handleContextMenu = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    };
-
-    // Disable keyboard shortcuts - only for non-developers
-    const handleKeyDown = (e) => {
-      // Disable F12
-      if (e.key === 'F12' || e.keyCode === 123) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-      
-      // Disable Ctrl+Shift+I (DevTools)
-      if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-      
-      // Disable Ctrl+Shift+J (Console)
-      if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-      
-      // Disable Ctrl+Shift+C (Element Inspector)
-      if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c' || e.keyCode === 67)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-      
-      // Disable Ctrl+U (View Source)
-      if (e.ctrlKey && (e.key === 'u' || e.key === 'U' || e.keyCode === 85)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-    };
-
-    // Improved DevTools detection - uses requestAnimationFrame for efficient continuous checking
-    // This catches devtools opened via menu (3 dots > More tools > Developer tools)
-    let rafId = null;
-    let lastCheck = 0;
-    const CHECK_INTERVAL = 500; // Check every 500ms (not every frame to reduce overhead)
-    let detectionCount = 0;
-    const REQUIRED_DETECTIONS = 2; // Require 2 consecutive detections (reduced for faster detection)
-
-    const detectDevTools = () => {
-      // Method 1: Check window size difference
-      const widthDiff = window.outerWidth - window.innerWidth;
-      const heightDiff = window.outerHeight - window.innerHeight;
-      
-      // Method 2: Check console timing
-      const consoleStart = performance.now();
-      console.log('%c', '');
-      const consoleEnd = performance.now();
-      const consoleTiming = consoleEnd - consoleStart;
-      
-      // Method 3: Use devtools detection via toString
-      let devtoolsOpen = false;
-      try {
-        const element = new window.Image();
-        Object.defineProperty(element, 'id', {
-          get: function() {
-            devtoolsOpen = true;
-          }
-        });
-        // This triggers the getter if console is open
-        requestAnimationFrame(() => {
-          console.log(element);
-          console.clear();
-        });
-      } catch (e) {
-        // Ignore
-      }
-      
-      // Check multiple conditions - any one can indicate devtools
-      // Lower thresholds to catch menu-opened devtools faster
-      const hasDimensionDiff = widthDiff > 160 || heightDiff > 160;
-      const hasSlowConsole = consoleTiming > 1.5; // Slightly lower threshold
-      const hasDevtoolsGetter = devtoolsOpen;
-      
-      // If any method detects devtools, increment counter
-      if (hasDimensionDiff || hasSlowConsole || hasDevtoolsGetter) {
-        detectionCount++;
-        if (detectionCount >= REQUIRED_DETECTIONS) {
-          setDevToolsDetected(true);
-          detectionCount = REQUIRED_DETECTIONS; // Keep at max to maintain detection
-        }
-      } else {
-        // Reset counter if all methods fail
-        if (detectionCount > 0) {
-          detectionCount = 0;
-        }
-        setDevToolsDetected(false);
-      }
-    };
-
-    // Continuous detection using requestAnimationFrame (more efficient than setInterval)
-    const continuousCheck = (timestamp) => {
-      if (timestamp - lastCheck >= CHECK_INTERVAL) {
-        detectDevTools();
-        lastCheck = timestamp;
-      }
-      rafId = requestAnimationFrame(continuousCheck);
-    };
-    
-    // Start continuous checking
-    rafId = requestAnimationFrame(continuousCheck);
-
-    // Add event listeners with capture phase
-    document.addEventListener('contextmenu', handleContextMenu, true);
-    document.addEventListener('keydown', handleKeyDown, true);
-    window.addEventListener('contextmenu', handleContextMenu, true);
-    window.addEventListener('keydown', handleKeyDown, true);
-
-    // Listen for window resize (immediate check)
-    const handleResize = () => {
-      detectDevTools();
-    };
-    window.addEventListener('resize', handleResize);
-
-    // Detect when keyboard shortcuts are attempted
-    const handleKeyDownDetection = (e) => {
-      if (e.key === 'F12' || e.keyCode === 123 ||
-          (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) ||
-          (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) ||
-          (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c' || e.keyCode === 67))) {
-        // Check immediately and after delay
-        detectDevTools();
-        setTimeout(() => {
-          detectDevTools();
-        }, 300);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDownDetection);
-
-    // Also check on focus/blur (devtools might affect window focus)
-    const handleFocus = () => {
-      setTimeout(() => detectDevTools(), 100);
-    };
-    const handleBlur = () => {
-      setTimeout(() => detectDevTools(), 100);
-    };
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('blur', handleBlur);
-
-    // Cleanup
-    return () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-      document.removeEventListener('contextmenu', handleContextMenu, true);
-      document.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('contextmenu', handleContextMenu, true);
-      window.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('keydown', handleKeyDownDetection);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, [isDeveloper]);
-
-  // Handle logout when devtools detected (only after 15 seconds if still open, skip on login page)
-  useEffect(() => {
-    // Skip for developers
-    if (isDeveloper) {
-      return;
-    }
-
-    // Check if on login page
-    const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-    const isLoginPage = currentPath === '/';
-    
-    // On login page, show message but don't redirect
-    if (isLoginPage && devToolsDetected) {
-      // Just show the message, no timer or redirect
-      return;
-    }
-    
-    // For non-login pages, set up timer and redirect
-    if (devToolsDetected && !isLoggingOut && !isLoginPage) {
-      let redirectTimeout;
-      let timerInterval;
-      
-      // Reset timer to 15 when devtools detected
-      setTimer(15);
-      
-      let currentTime = 15;
-      
-      // Countdown timer that updates every second
-      timerInterval = setInterval(() => {
-        currentTime = currentTime - 1;
-        setTimer(currentTime);
-        
-        if (currentTime <= 0) {
-          clearInterval(timerInterval);
-          setTimer(0);
-        }
-      }, 1000);
-      
-      // Set 15 second timer for redirect
-      redirectTimeout = setTimeout(() => {
-        // Clear timer interval if still running
-        clearInterval(timerInterval);
-        
-        // Check if devtools are still open (one final check)
-        const widthDiff = window.outerWidth - window.innerWidth;
-        const heightDiff = window.outerHeight - window.innerHeight;
-        const consoleStart = performance.now();
-        console.log('%c', '');
-        const consoleEnd = performance.now();
-        const stillOpen = (widthDiff > 200 || heightDiff > 200) && (consoleEnd - consoleStart > 2);
-        
-        if (stillOpen && devToolsDetected) {
-          setIsLoggingOut(true);
-          setTimer(0);
-          
-          // Call logout API to clear HttpOnly token cookie
-          const logout = async () => {
-            try {
-              await fetch('/api/auth/logout', {
-                method: 'POST',
-                credentials: 'include'
-              });
-            } catch (error) {
-              // Ignore errors, continue with cleanup
-            }
-            
-            // Clear all other cookies (non-HttpOnly ones)
-            const cookies = document.cookie.split(";");
-            cookies.forEach((c) => {
-              const eqPos = c.indexOf("=");
-              const name = eqPos > -1 ? c.substr(0, eqPos).trim() : c.trim();
-              if (name) {
-                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
-              }
-            });
-            
-            // Clear localStorage
-            try {
-              localStorage.clear();
-            } catch (e) {
-              // Ignore
-            }
-            
-            // Clear sessionStorage
-            try {
-              sessionStorage.clear();
-            } catch (e) {
-              // Ignore
-            }
-            
-            // Redirect to login
-            window.location.href = '/';
-          };
-          
-          logout();
-        } else {
-          // Devtools closed, reset state
-          clearInterval(timerInterval);
-          setDevToolsDetected(false);
-          setIsLoggingOut(false);
-          setTimer(15);
-        }
-      }, 15000); // 15 seconds
-      
-      return () => {
-        clearTimeout(redirectTimeout);
-        clearInterval(timerInterval);
-      };
-    } else if (!devToolsDetected) {
-      // Reset timer when devtools are not detected
-      setTimer(15);
-    }
-  }, [devToolsDetected, isLoggingOut, isDeveloper]);
-
-  // Skip all protection for developers
-  if (isDeveloper) {
-    return null;
-  }
-
-  // Render protection in both development and production for testing
-  // Show protection on all pages including login page (but with different behavior)
-  if (devToolsDetected) {
-    return (
-      <>
-        {/* Dark overlay background with blur */}
-        <div
-          data-devtools-overlay
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            zIndex: 99999,
-            pointerEvents: 'auto',
-            cursor: 'none'
-          }}
-          onContextMenu={(e) => e.preventDefault()}
-        />
-        
-        {/* Popup message container with black background */}
-        <div
-          data-devtools-message-container
-          style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex: 100000,
-            backgroundColor: '#000000',
-            borderRadius: '20px',
-            padding: '40px',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.9)',
-            border: '2px solid rgba(255, 255, 255, 0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            gap: '20px',
-            minWidth: '400px',
-            maxWidth: '90%',
-            cursor: 'none',
-            pointerEvents: 'auto',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-            MozUserSelect: 'none',
-            msUserSelect: 'none'
-          }}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <div 
-            className="devtools-icon"
-            style={{
-              color: 'white',
-              fontSize: '3rem'
-            }}
-          >🔒</div>
-          <div 
-            className="devtools-message"
-            style={{
-              color: 'white',
-              fontSize: '1.5rem',
-              fontWeight: 'bold',
-              textAlign: 'center',
-              lineHeight: '1.5'
-            }}
-          >
-            {isLoginPage ? (
-              <>Developer tools detected. Please close them to continue.</>
-            ) : (
-              <>
-                Developer tools detected. Close them to continue or you&apos;ll be redirected to login in{' '}
-                <span className="devtools-timer" style={{
-                  color: '#1FA8DC',
-                  fontSize: '1.8rem',
-                  fontWeight: 'bold'
-                }}>{timer.toString().padStart(2, '0')}</span>
-                {' '}seconds.
-              </>
-            )}
-          </div>
-          {isLoggingOut && (
-            <div 
-              className="devtools-spinner"
-              style={{
-                width: '50px',
-                height: '50px',
-                border: '4px solid rgba(255, 255, 255, 0.3)',
-                borderTop: '4px solid #1FA8DC',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                marginTop: '10px'
-              }} 
-            />
-          )}
-        </div>
-        
-        <style jsx global>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          * {
-            cursor: none !important;
-            pointer-events: none !important;
-            user-select: none !important;
-            -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
-          }
-          body {
-            overflow: hidden !important;
-          }
-          input, textarea, select, button, a {
-            pointer-events: none !important;
-            cursor: none !important;
-          }
-          *:focus {
-            outline: none !important;
-          }
-          [data-devtools-message-container] {
-            filter: none !important;
-            -webkit-filter: none !important;
-          }
-          [data-devtools-message-container] * {
-            filter: none !important;
-            -webkit-filter: none !important;
-          }
-          
-          /* Responsive styles for devtools message */
-          @media (max-width: 768px) {
-            [data-devtools-message-container] {
-              min-width: 90% !important;
-              max-width: 95% !important;
-              padding: 30px 20px !important;
-              border-radius: 15px !important;
-              gap: 16px !important;
-            }
-            .devtools-icon {
-              font-size: 2.5rem !important;
-            }
-            .devtools-message {
-              font-size: 1.2rem !important;
-              line-height: 1.4 !important;
-            }
-            .devtools-timer {
-              font-size: 1.5rem !important;
-            }
-            .devtools-spinner {
-              width: 40px !important;
-              height: 40px !important;
-              border-width: 3px !important;
-            }
-          }
-          
-          @media (max-width: 480px) {
-            [data-devtools-message-container] {
-              min-width: 95% !important;
-              max-width: 98% !important;
-              padding: 24px 16px !important;
-              border-radius: 12px !important;
-              gap: 14px !important;
-            }
-            .devtools-icon {
-              font-size: 2rem !important;
-            }
-            .devtools-message {
-              font-size: 1rem !important;
-              line-height: 1.3 !important;
-            }
-            .devtools-timer {
-              font-size: 1.3rem !important;
-            }
-            .devtools-spinner {
-              width: 35px !important;
-              height: 35px !important;
-              border-width: 3px !important;
-            }
-          }
-          
-          @media (max-width: 360px) {
-            [data-devtools-message-container] {
-              padding: 20px 12px !important;
-              border-radius: 10px !important;
-              gap: 12px !important;
-            }
-            .devtools-icon {
-              font-size: 1.8rem !important;
-            }
-            .devtools-message {
-              font-size: 0.9rem !important;
-              line-height: 1.2 !important;
-            }
-            .devtools-timer {
-              font-size: 1.2rem !important;
-            }
-            .devtools-spinner {
-              width: 30px !important;
-              height: 30px !important;
-              border-width: 2px !important;
-            }
-          }
-        `}</style>
-      </>
-    );
-  }
-
-  return null;
-}
-
 // Preloader Component
 function Preloader() {
   return (
@@ -1179,8 +656,37 @@ export default function App({ Component, pageProps }) {
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
           <MantineProvider>
-            <DevToolsProtection userRole={userRole} />
             <Component {...pageProps} />
+            <ReactQueryDevtools initialIsOpen={false} />
+          </MantineProvider>
+        </ErrorBoundary>
+      </QueryClientProvider>
+    );
+  }
+
+  // Only show Header/Footer if user is authenticated
+  if (!isAuthenticated) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ErrorBoundary>
+          <MantineProvider>
+            {router.pathname === "/dashboard/student_info" ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: "100vh",
+                }}
+              >
+                <CustomHeader />
+                <div style={{ flex: 1 }}>
+                  <Component {...pageProps} />
+                </div>
+                <Footer />
+              </div>
+            ) : (
+              <Component {...pageProps} />
+            )}
             <ReactQueryDevtools initialIsOpen={false} />
           </MantineProvider>
         </ErrorBoundary>
@@ -1192,13 +698,12 @@ export default function App({ Component, pageProps }) {
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         <MantineProvider>
-          <DevToolsProtection userRole={userRole} />
           <div className="page-container" style={{ 
             display: 'flex', 
             flexDirection: 'column', 
             minHeight: '100vh' 
           }}>
-            <Header />
+            {router.pathname !== "/" && <Header />}
             
             {/* Session Expiry Warning */}
             {showExpiryWarning && (
@@ -1221,7 +726,7 @@ export default function App({ Component, pageProps }) {
             <div className="content" style={{ flex: 1 }}>
               <Component {...pageProps} />
             </div>
-            <Footer />
+            {router.pathname !== "/" && <Footer />}
           </div>
           <ReactQueryDevtools initialIsOpen={false} />
         </MantineProvider>

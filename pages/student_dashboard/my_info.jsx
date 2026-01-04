@@ -8,6 +8,7 @@ import { useProfile, useUpdateProfile, useProfilePicture } from '../../lib/api/a
 import apiClient from '../../lib/axios';
 import Image from 'next/image';
 import NeedHelp from '../../components/NeedHelp';
+import ChartTabs from '../../components/ChartTabs';
 
 export default function MyInfo() {
   const containerRef = useRef(null);
@@ -122,14 +123,15 @@ export default function MyInfo() {
 
   // Helper function to get attendance status for a week
   const getWeekAttendance = (weekNumber) => {
-    if (!student || !student.weeks) return { attended: false, hwDone: false, quizDegree: null, message_state: false, lastAttendance: null };
+    if (!student || !student.weeks) return { attended: false, hwDone: false, hwDegree: null, quizDegree: null, message_state: false, lastAttendance: null };
     
     const weekData = student.weeks.find(w => w.week === weekNumber);
-    if (!weekData) return { attended: false, hwDone: false, quizDegree: null, message_state: false, lastAttendance: null };
+    if (!weekData) return { attended: false, hwDone: false, hwDegree: null, quizDegree: null, message_state: false, lastAttendance: null };
     
     return {
       attended: weekData.attended || false,
       hwDone: weekData.hwDone || false,
+      hwDegree: weekData.hwDegree || null,
       quizDegree: weekData.quizDegree || null,
       comment: weekData.comment || null,
       message_state: weekData.message_state || false,
@@ -754,7 +756,7 @@ export default function MyInfo() {
                 📋 No weeks records found for this student
               </div>
             ) : (
-              <ScrollArea h={400} type="hover" className={styles.scrolled}>
+              <ScrollArea h="calc(30rem * var(--mantine-scale))" type="hover" className={styles.scrolled}>
                 <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: '950px' }}>
                   <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
                     <Table.Tr>
@@ -801,6 +803,15 @@ export default function MyInfo() {
                                   fontSize: '1rem'
                                 }}>⚠️ Not Completed</span>;
                               } else if (weekData.hwDone === true) {
+                                // Show homework degree if it exists
+                                const hwDegree = weekData.hwDegree;
+                                if (hwDegree && String(hwDegree).trim() !== '') {
+                                  return <span style={{ 
+                                    color: '#28a745',
+                                    fontWeight: 'bold',
+                                    fontSize: '1rem'
+                                  }}>✅ Done ({hwDegree})</span>;
+                                }
                                 return <span style={{ 
                                   color: '#28a745',
                                   fontWeight: 'bold',
@@ -864,6 +875,16 @@ export default function MyInfo() {
             )}
           </div>
         ) : null}
+        
+        {/* Charts Tabs Section - Separate Container */}
+        {student && !studentDeleted && (
+          <div className="info-container" style={{ marginTop: '24px' }}>
+            <ChartTabs 
+              studentId={student.id} 
+              hasAuthToken={true} 
+            />
+          </div>
+        )}
         
         <Modal
           opened={detailsOpen}

@@ -231,11 +231,11 @@ export default function ContactAssistants() {
                   margin: 0,
                   fontWeight: '500'
                 }}>
-                  Our assistants are here to support you with system access, technical issues, and general questions. Feel free to reach out if you face any problems or need guidance—we're happy to help 😊❤.
+                  Our assistants are here to support you with system access, technical issues, and general questions. Feel free to reach out if you face any problems or need guidance—we're happy to help 😊❤️.
                 </p>
               </div>
 
-              <ScrollArea h={400} type="hover" className={styles.scrolled}>
+              <ScrollArea h="calc(20rem * var(--mantine-scale))" type="hover" className={styles.scrolled}>
                 <Table striped highlightOnHover withTableBorder withColumnBorders className="contact-assistants-table">
                   <Table.Thead style={{ position: 'sticky', top: 0, backgroundColor: '#f8f9fa', zIndex: 10 }}>
                     <Table.Tr>

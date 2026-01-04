@@ -123,12 +123,12 @@ export default function ManageOnlineSystem() {
 
   return (
     <div className="page-wrapper" style={{ 
-      padding: "25px",
+      padding: "20px",
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto',
       minHeight: '100vh',
-      marginBottom: '-50px'
+      marginBottom: '-30px'
     }}>
       <div className="main-container" style={{ maxWidth: 600, margin: "10px auto", textAlign: "center", width: '100%' }}>
         <Title>Manage Online System</Title>

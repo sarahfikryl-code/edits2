@@ -149,6 +149,11 @@ export function SessionTable({
             } else if (student.hwDone === "Not Completed" || student.hwDone === "not completed" || student.hwDone === "NOT COMPLETED") {
               return <span style={{ color: '#ffc107', fontSize: '15px', fontWeight: 'bold' }}>⚠️ Not Completed</span>;
             } else if (student.hwDone === true) {
+              // Show homework degree if it exists
+              const hwDegree = student.hwDegree || student.hw_degree;
+              if (hwDegree && String(hwDegree).trim() !== '') {
+                return <span style={{ color: '#28a745', fontSize: '15px', fontWeight: 'bold' }}>✅ Done ({hwDegree})</span>;
+              }
               return <span style={{ color: '#28a745', fontSize: '15px', fontWeight: 'bold' }}>✅ Done</span>;
             } else {
               return <span style={{ color: '#dc3545', fontSize: '15px', fontWeight: 'bold' }}>❌ Not Done</span>;

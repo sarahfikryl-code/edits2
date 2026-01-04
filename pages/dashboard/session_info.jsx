@@ -180,7 +180,7 @@ export default function SessionInfo() {
         lastAttendance: null,
         lastAttendanceCenter: null,
         hwDone: false,
-        
+        hwDegree: null,
         quizDegree: null,
         comment: null,
         message_state: false, // Default to false for non-existent weeks
@@ -195,6 +195,7 @@ export default function SessionInfo() {
       lastAttendance: weekData.lastAttendance,
       lastAttendanceCenter: weekData.lastAttendanceCenter,
       hwDone: weekData.hwDone,
+      hwDegree: weekData.hwDegree || null,
       quizDegree: weekData.quizDegree,
       comment: weekData.comment,
       message_state: weekData.message_state,

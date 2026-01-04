@@ -10,13 +10,14 @@ import {
   Cell
 } from "recharts";
 
-// Color function for bars based on percentage
-function getBarColor(percentage) {
-  // Red for 0% or < 50% (remove yellow)
-  if (percentage === 0) return '#a71e2a'; // Darker red for 0% (not answered)
-  if (percentage < 50) return '#dc3545'; // Red for < 50%
-  if (percentage < 70) return '#17a2b8'; // Blue for 50-70%
-  return '#28a745'; // Green for >= 70%
+// Color function for bars - alternating colors
+function getBarColor(index) {
+  const colors = [
+    'rgb(54, 162, 235)',  // Blue
+    'rgb(255, 99, 132)',   // Pink/Red
+    '#3dd228'              // Green
+  ];
+  return colors[index % colors.length];
 }
 
 export default function QuizPerformanceChart({ chartData, height = 500 }) {
@@ -56,6 +57,7 @@ export default function QuizPerformanceChart({ chartData, height = 500 }) {
           <BarChart 
           data={data} 
           margin={{ top: 20, right: 10, left: 10, bottom: 50 }}
+          className="quiz-bar-chart"
         >
             <CartesianGrid strokeDasharray="3 3" stroke="#e9ecef" />
             <XAxis 
@@ -67,12 +69,14 @@ export default function QuizPerformanceChart({ chartData, height = 500 }) {
               angle={-20} 
               textAnchor="end" 
               height={50}
+              className="quiz-x-axis"
             />
             <YAxis 
               domain={[0, 100]} 
               tick={{ fill: '#495057', fontSize: 14 }}
               stroke="#6c757d"
-              label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft', offset: -5, style: { textAnchor: 'middle' } }}
+              label={{ value: 'Percentage (%)', angle: -90, position: 'insideLeft', offset: -5, style: { textAnchor: 'middle', fontSize: 14 } }}
+              className="quiz-y-axis"
             />
             <Tooltip
               contentStyle={{
@@ -102,7 +106,7 @@ export default function QuizPerformanceChart({ chartData, height = 500 }) {
               maxBarSize={50}
             >
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry.percentage)} />
+                <Cell key={`cell-${index}`} fill={getBarColor(index)} />
               ))}
             </Bar>
           </BarChart>
@@ -112,36 +116,69 @@ export default function QuizPerformanceChart({ chartData, height = 500 }) {
         @media (max-width: 768px) {
           .quiz-chart-container {
             height: 350px !important;
+            overflow-x: auto;
+          }
+          .quiz-bar-chart {
+            min-width: 100%;
           }
           .quiz-chart-container .recharts-cartesian-axis-tick text {
             font-size: 11px !important;
           }
-          .quiz-chart-container .recharts-label {
-            font-size: 11px !important;
+          .quiz-chart-container .quiz-x-axis .recharts-cartesian-axis-tick text {
+            font-size: 10px !important;
+          }
+          .quiz-chart-container .quiz-y-axis .recharts-label {
+            font-size: 16px !important;
+            font-weight: 600 !important;
+          }
+          .quiz-chart-container .quiz-y-axis .recharts-cartesian-axis-tick text {
+            font-size: 12px !important;
           }
         }
         
         @media (max-width: 480px) {
           .quiz-chart-container {
             height: 320px !important;
+            overflow-x: auto;
+          }
+          .quiz-bar-chart {
+            min-width: 100%;
           }
           .quiz-chart-container .recharts-cartesian-axis-tick text {
             font-size: 10px !important;
           }
-          .quiz-chart-container .recharts-label {
-            font-size: 10px !important;
+          .quiz-chart-container .quiz-x-axis .recharts-cartesian-axis-tick text {
+            font-size: 9px !important;
+          }
+          .quiz-chart-container .quiz-y-axis .recharts-label {
+            font-size: 18px !important;
+            font-weight: 700 !important;
+          }
+          .quiz-chart-container .quiz-y-axis .recharts-cartesian-axis-tick text {
+            font-size: 11px !important;
           }
         }
         
         @media (max-width: 360px) {
           .quiz-chart-container {
             height: 280px !important;
+            overflow-x: auto;
+          }
+          .quiz-bar-chart {
+            min-width: 100%;
           }
           .quiz-chart-container .recharts-cartesian-axis-tick text {
             font-size: 9px !important;
           }
-          .quiz-chart-container .recharts-label {
-            font-size: 9px !important;
+          .quiz-chart-container .quiz-x-axis .recharts-cartesian-axis-tick text {
+            font-size: 8px !important;
+          }
+          .quiz-chart-container .quiz-y-axis .recharts-label {
+            font-size: 16px !important;
+            font-weight: 700 !important;
+          }
+          .quiz-chart-container .quiz-y-axis .recharts-cartesian-axis-tick text {
+            font-size: 10px !important;
           }
         }
       `}</style>

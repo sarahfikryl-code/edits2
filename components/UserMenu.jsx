@@ -331,6 +331,10 @@ export default function UserMenu() {
           {userData.role !== 'student' && (
             <>
               <button style={menuBtnStyle} onClick={handleEditProfile}>Edit My Profile</button>
+              <button style={menuBtnStyle} onClick={() => {
+                setOpen(false);
+                router.push('/dashboard/public_link_generator');
+              }}>Public Link Generator</button>
               {(userData.role === 'admin' || userData.role === 'developer') && (
                 <button style={menuBtnStyle} onClick={handleManageAssistants}>Manage Assistants</button>
               )}

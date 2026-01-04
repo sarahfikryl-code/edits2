@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useUpdateMessageState } from '../lib/api/students';
+import { generatePublicStudentLink } from '../lib/generatePublicLink';
 
 const WhatsAppButton = ({ student, onMessageSent }) => {
   const [message, setMessage] = useState('');
@@ -66,10 +67,14 @@ const WhatsAppButton = ({ student, onMessageSent }) => {
       }
 
       // Get current week data - assume we're working with the current week data
+      const currentWeekNumber = student.currentWeekNumber || 1;
+      const weekIndex = currentWeekNumber - 1;
+      const weekData = student.weeks && student.weeks[weekIndex];
       const currentWeek = {
         attended: student.attended_the_session || false,
         lastAttendance: student.lastAttendance || 'N/A',
         hwDone: student.hwDone || false,
+        hwDegree: student.hwDegree || (weekData ? weekData.hwDegree : null) || null,
         quizDegree: student.quizDegree ?? null
       };
 
@@ -90,7 +95,13 @@ We want to inform you that we are in:
         // Format homework status properly
         let homeworkStatus = '';
         if (student.hwDone === true) {
-          homeworkStatus = 'Done';
+          // Show homework degree if it exists
+          const hwDegree = currentWeek.hwDegree;
+          if (hwDegree && String(hwDegree).trim() !== '') {
+            homeworkStatus = `Done (${hwDegree})`;
+          } else {
+            homeworkStatus = 'Done';
+          }
         } else if (student.hwDone === false) {
           homeworkStatus = 'Not Done';
         } else if (student.hwDone === 'No Homework') {
@@ -111,10 +122,7 @@ We want to inform you that we are in:
       }
       
       // Add comment if it exists and is not null/undefined
-      // Get comment from the current week data
-      const currentWeekNumber = student.currentWeekNumber;
-      const weekIndex = currentWeekNumber - 1;
-      const weekData = student.weeks && student.weeks[weekIndex];
+      // Get comment from the current week data (reuse variables from above)
       const weekComment = weekData ? weekData.comment : null;
       
       if (weekComment && weekComment.trim() !== '' && weekComment !== 'undefined') {
@@ -122,10 +130,15 @@ We want to inform you that we are in:
   • Comment: ${weekComment}`;
       }
 
+      // Generate public link with HMAC
+      const publicLink = generatePublicStudentLink(student.id.toString());
+
       whatsappMessage += `
       
 Note :-
   • ${firstName}'s ID: ${student.id}
+
+🖇️ Track Attendance: ${publicLink}
 
 We are always happy to stay in touch 😊❤
 

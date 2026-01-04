@@ -16,6 +16,14 @@ export default function HomeworkDetails() {
   const [questionImages, setQuestionImages] = useState({});
   const { data: profile } = useProfile();
 
+  // Redirect if no ID is provided
+  useEffect(() => {
+    if (router.isReady && !id) {
+      router.replace('/student_dashboard/my_homeworks');
+      return;
+    }
+  }, [router.isReady, id, router]);
+
   useEffect(() => {
     if (!id || !profile?.id) return;
 
@@ -207,7 +215,7 @@ export default function HomeworkDetails() {
         <div className="details-container" style={{
           background: 'white',
           borderRadius: '16px',
-          padding: '24px',
+          padding: '15px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
         }}>
           {/* Score Summary - Circular Percentage Display */}
@@ -286,9 +294,8 @@ export default function HomeworkDetails() {
                 <div
                   key={idx}
                   style={{
-                    border: '2px solid #e9ecef',
-                    borderRadius: '12px',
-                    padding: '20px',
+                    borderTop: '2px solid #e9ecef',
+                    padding: '15px 0px',
                     backgroundColor: '#fff'
                   }}
                 >

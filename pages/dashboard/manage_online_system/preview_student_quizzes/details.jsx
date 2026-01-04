@@ -14,6 +14,20 @@ export default function PreviewQuizDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const [questionImages, setQuestionImages] = useState({});
 
+  // Redirect if required IDs are not provided
+  useEffect(() => {
+    if (router.isReady) {
+      if (!student_id || !quiz_id) {
+        if (student_id) {
+          router.replace(`/dashboard/manage_online_system/preview_student_quizzes?student_id=${student_id}`);
+        } else {
+          router.replace('/dashboard/manage_online_system/preview_student_quizzes');
+        }
+        return;
+      }
+    }
+  }, [router.isReady, student_id, quiz_id, router]);
+
   useEffect(() => {
     if (!student_id || !quiz_id) return;
 
@@ -263,9 +277,8 @@ export default function PreviewQuizDetails() {
                 <div
                   key={idx}
                   style={{
-                    border: '2px solid #e9ecef',
-                    borderRadius: '12px',
-                    padding: '20px',
+                    borderTop: '2px solid #e9ecef',
+                    padding: '15px 0px',
                     backgroundColor: '#fff'
                   }}
                 >

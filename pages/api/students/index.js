@@ -7,7 +7,11 @@ import { authMiddleware } from '../../../lib/authMiddleware';
 function loadEnvConfig() {
   try {
     const envPath = path.join(process.cwd(), '..', 'env.config');
+    console.log('📂 Attempting to read env.config from:', envPath);
+    console.log('📂 Current working directory:', process.cwd());
+    
     const envContent = fs.readFileSync(envPath, 'utf8');
+    console.log('✅ Successfully read env.config file');
     const envVars = {};
     
     envContent.split('\n').forEach(line => {
@@ -17,25 +21,34 @@ function loadEnvConfig() {
         if (index !== -1) {
           const key = trimmed.substring(0, index).trim();
           let value = trimmed.substring(index + 1).trim();
-          value = value.replace(/^"|"$/g, ''); // strip quotes
+          // Strip both single and double quotes from beginning and end
+          value = value.replace(/^["']|["']$/g, '');
           envVars[key] = value;
+          // Sanitize MONGO_URI for logging (hide password if present)
+          const logValue = key === 'MONGO_URI' 
+            ? (value.includes('@') ? value.replace(/:[^:@]*@/, ':****@') : value)
+            : value;
+          console.log(`📝 Loaded env var: ${key} = ${logValue}`);
         }
       }
     });
     
+    console.log('📋 Total env vars loaded:', Object.keys(envVars).length);
     return envVars;
   } catch (error) {
-    console.log('⚠️  Could not read env.config, using process.env as fallback');
+    console.log('⚠️  Could not read env.config:', error.message);
+    console.log('⚠️  Using process.env as fallback');
     return {};
   }
 }
 
 const envConfig = loadEnvConfig();
-const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'topphysics_secret';
-const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/topphysics';
-const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'topphysics';
+const JWT_SECRET = envConfig.JWT_SECRET || process.env.JWT_SECRET || 'demo_secret';
+const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/demo-attendance-system';
+const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'demo-attendance-system';
 
-console.log('🔗 Using Mongo URI:', MONGO_URI);
+console.log('🔗 Final MONGO_URI being used:', MONGO_URI.replace(/:[^:@]*@/, ':****@'));
+console.log('🔗 Final DB_NAME being used:', DB_NAME);
 
 // Auth middleware is now imported from shared utility
 
@@ -54,10 +67,80 @@ export default async function handler(req, res) {
       });
     }
 
+    // Check if MONGO_URI appears to have authentication credentials
+    // MongoDB URI with auth: mongodb://username:password@host:port/database
+    // MongoDB URI without auth: mongodb://host:port/database
+    const hasAuthInUri = MONGO_URI.includes('@') && MONGO_URI.split('@')[0].includes(':');
+    const isLocalhost = MONGO_URI.includes('localhost') || MONGO_URI.includes('127.0.0.1');
+    
+    console.log('🔍 MONGO_URI analysis:');
+    console.log('  - Has auth credentials:', hasAuthInUri);
+    console.log('  - Is localhost:', isLocalhost);
+    console.log('  - Full URI (sanitized):', MONGO_URI.replace(/:[^:@]*@/, ':****@'));
+    
+    if (!hasAuthInUri && !isLocalhost) {
+      console.warn('⚠️  MONGO_URI does not appear to include authentication credentials');
+      console.warn('⚠️  If MongoDB requires authentication, add credentials to MONGO_URI in env.config');
+      console.warn('⚠️  Format: mongodb://username:password@host:port/database?authSource=admin');
+    }
+
     console.log('🔗 Connecting to MongoDB...');
-    client = await MongoClient.connect(MONGO_URI);
-    db = client.db(DB_NAME);
-    console.log('✅ Connected to database:', DB_NAME);
+    console.log('🔗 MONGO_URI (sanitized):', MONGO_URI.replace(/:[^:@]*@/, ':****@'));
+    
+    // Connect with options to handle authentication
+    const clientOptions = {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    };
+    
+    try {
+      client = await MongoClient.connect(MONGO_URI, clientOptions);
+      db = client.db(DB_NAME);
+      console.log('✅ MongoDB client connected');
+      
+      // Test the connection by running a simple command to verify authentication
+      try {
+        await db.admin().ping();
+        console.log('✅ Database ping successful - authentication verified');
+      } catch (pingError) {
+        console.error('❌ Database ping failed:', pingError.message);
+        if (pingError.message && (pingError.message.includes('authentication') || pingError.message.includes('Unauthorized') || pingError.code === 13)) {
+          console.error('⚠️  Authentication error detected');
+          console.error('⚠️  MONGO_URI from env.config:', envConfig.MONGO_URI || 'NOT FOUND');
+          console.error('⚠️  MONGO_URI being used:', MONGO_URI);
+          console.error('⚠️  Expected format: mongodb://username:password@host:port/database?authSource=admin');
+          if (client) {
+            try {
+              await client.close();
+            } catch (closeErr) {
+              console.error('Error closing client:', closeErr);
+            }
+          }
+          return res.status(500).json({ 
+            error: 'Database authentication failed', 
+            details: 'MongoDB requires authentication but connection string is missing credentials. Update MONGO_URI in env.config to include username and password: mongodb://username:password@host:port/database?authSource=admin'
+          });
+        }
+        throw pingError;
+      }
+    } catch (connectError) {
+      console.error('❌ MongoDB connection error:', connectError.message);
+      console.error('❌ Error code:', connectError.code);
+      console.error('❌ Error codeName:', connectError.codeName);
+      
+      if (connectError.code === 13 || connectError.codeName === 'Unauthorized' || 
+          (connectError.message && (connectError.message.includes('authentication') || connectError.message.includes('Unauthorized')))) {
+        console.error('⚠️  Authentication error detected');
+        console.error('⚠️  MONGO_URI from env.config:', envConfig.MONGO_URI || 'NOT FOUND');
+        console.error('⚠️  MONGO_URI being used:', MONGO_URI);
+        console.error('⚠️  Please update env.config with: MONGO_URI="mongodb://username:password@host:port/database?authSource=admin"');
+        return res.status(500).json({ 
+          error: 'Database authentication failed', 
+          details: 'MongoDB requires authentication. Please update MONGO_URI in env.config to include username and password.'
+        });
+      }
+      throw connectError;
+    }
     
     // Verify authentication
     console.log('🔐 Authenticating user...');

@@ -5,7 +5,7 @@ import Title from "../../components/Title";
 import AttendanceWeekSelect from "../../components/AttendanceWeekSelect";
 import CenterSelect from "../../components/CenterSelect";
 import QRScanner from "../../components/QRScanner";
-import { useStudents, useStudent, useToggleAttendance, useUpdateHomework, useUpdateQuizGrade, useUpdateWeekComment } from "../../lib/api/students";
+import { useStudents, useStudent, useToggleAttendance, useUpdateHomework, useUpdateHomeworkDegree, useUpdateQuizGrade, useUpdateWeekComment } from "../../lib/api/students";
 
 // Helper to extract student ID from QR text (URL or plain number)
 function extractStudentId(qrText) {
@@ -44,6 +44,9 @@ export default function QR() {
   const [noQuiz, setNoQuiz] = useState(false);
   const [noHomework, setNoHomework] = useState(false);
   const [notCompleted, setNotCompleted] = useState(false);
+  const [homeworkDegree, setHomeworkDegree] = useState("");
+  const [homeworkDegreeOutOf, setHomeworkDegreeOutOf] = useState("");
+  const [homeworkDegreeSuccess, setHomeworkDegreeSuccess] = useState("");
   const [openDropdown, setOpenDropdown] = useState(null); // 'week', 'center', or null
   // Simple optimistic state for immediate UI feedback
   const [optimisticHwDone, setOptimisticHwDone] = useState(null);
@@ -85,6 +88,7 @@ export default function QR() {
   const { data: allStudents } = useStudents();
   const toggleAttendanceMutation = useToggleAttendance();
   const updateHomeworkMutation = useUpdateHomework();
+  const updateHomeworkDegreeMutation = useUpdateHomeworkDegree();
   const updateQuizGradeMutation = useUpdateQuizGrade();
   const updateWeekCommentMutation = useUpdateWeekComment();
 
@@ -93,8 +97,9 @@ export default function QR() {
     const rememberedCenter = sessionStorage.getItem('lastAttendanceCenter');
     const rememberedWeek = sessionStorage.getItem('lastSelectedWeek');
     const rememberedQuizOutOf = sessionStorage.getItem('lastQuizOutOf');
+    const rememberedHomeworkOutOf = sessionStorage.getItem('lastHomeworkOutOf');
     
-    console.log('Loading from session storage:', { rememberedCenter, rememberedWeek, rememberedQuizOutOf });
+    console.log('Loading from session storage:', { rememberedCenter, rememberedWeek, rememberedQuizOutOf, rememberedHomeworkOutOf });
     
     if (rememberedCenter) {
       setAttendanceCenter(rememberedCenter);
@@ -107,6 +112,10 @@ export default function QR() {
     if (rememberedQuizOutOf) {
       setQuizDegreeOutOf(rememberedQuizOutOf);
       console.log('Quiz out of loaded from session storage:', rememberedQuizOutOf);
+    }
+    if (rememberedHomeworkOutOf) {
+      setHomeworkDegreeOutOf(rememberedHomeworkOutOf);
+      console.log('Homework out of loaded from session storage:', rememberedHomeworkOutOf);
     }
   }, []);
 
@@ -148,8 +157,8 @@ export default function QR() {
     if (!student.weeks || !weekString) return null;
     const weekNumber = getWeekNumber(weekString);
     if (!weekNumber) return null;
-    const weekIndex = weekNumber - 1;
-    return student.weeks[weekIndex] || null;
+    // Find week by week number, not by array index
+    return student.weeks.find(w => w && w.week === weekNumber) || null;
   };
 
   // Helper function to update student state with current week data
@@ -164,28 +173,75 @@ export default function QR() {
         lastAttendance: null,
         lastAttendanceCenter: null,
         hwDone: false,
+        hwDegree: null,
         quizDegree: null,
         comment: null,
         message_state: false
       };
     }
     
-    return {
+    // Always load data from database, regardless of attendance status
+    // Preserve the exact value from database, including boolean true
+    const updatedStudent = {
       ...student,
-      attended_the_session: weekData.attended,
-      lastAttendance: weekData.lastAttendance,
-      lastAttendanceCenter: weekData.lastAttendanceCenter,
-      hwDone: weekData.hwDone,
-      quizDegree: weekData.quizDegree,
-      comment: weekData.comment,
-      message_state: weekData.message_state
+      attended_the_session: weekData.attended !== undefined ? weekData.attended : false,
+      lastAttendance: weekData.lastAttendance || null,
+      lastAttendanceCenter: weekData.lastAttendanceCenter || null,
+      // Preserve boolean true, false, or string values exactly as they are in DB
+      hwDone: weekData.hwDone !== undefined ? weekData.hwDone : false,
+      // Preserve hwDegree even if it's an empty string (use nullish coalescing)
+      hwDegree: weekData.hwDegree !== undefined && weekData.hwDegree !== null ? weekData.hwDegree : null,
+      quizDegree: weekData.quizDegree !== undefined && weekData.quizDegree !== null ? weekData.quizDegree : null,
+      comment: weekData.comment || null,
+      message_state: weekData.message_state !== undefined ? weekData.message_state : false
     };
+    
+    // Debug log to verify data loading - always log when there's interesting data
+    console.log('📊 Loaded week data from DB:', {
+      week: weekString,
+      weekNumber: weekData.week,
+      attended: weekData.attended,
+      hwDone: weekData.hwDone,
+      hwDoneType: typeof weekData.hwDone,
+      hwDegree: weekData.hwDegree,
+      quizDegree: weekData.quizDegree,
+      updatedStudentHwDone: updatedStudent.hwDone,
+      updatedStudentHwDegree: updatedStudent.hwDegree
+    });
+    
+    return updatedStudent;
   };
 
   // Update student data with current week information using useMemo
   const student = useMemo(() => {
     if (rawStudent && selectedWeek) {
-      return updateStudentWithWeekData(rawStudent, selectedWeek);
+      const updated = updateStudentWithWeekData(rawStudent, selectedWeek);
+      console.log('🔄 Student object updated:', {
+        hasRawStudent: !!rawStudent,
+        selectedWeek,
+        updatedHwDone: updated?.hwDone,
+        updatedHwDegree: updated?.hwDegree,
+        updatedQuizDegree: updated?.quizDegree
+      });
+      return updated;
+    }
+    // If no selectedWeek, try to use week 1 as default if available
+    if (rawStudent && rawStudent.weeks && rawStudent.weeks.length > 0) {
+      const defaultWeek = rawStudent.weeks.find(w => w && w.week === 1) || rawStudent.weeks[0];
+      if (defaultWeek) {
+        console.log('⚠️ No selectedWeek, using default week data');
+        return {
+          ...rawStudent,
+          attended_the_session: defaultWeek.attended || false,
+          lastAttendance: defaultWeek.lastAttendance || null,
+          lastAttendanceCenter: defaultWeek.lastAttendanceCenter || null,
+          hwDone: defaultWeek.hwDone !== undefined ? defaultWeek.hwDone : false,
+          hwDegree: defaultWeek.hwDegree !== undefined && defaultWeek.hwDegree !== null ? defaultWeek.hwDegree : null,
+          quizDegree: defaultWeek.quizDegree !== undefined && defaultWeek.quizDegree !== null ? defaultWeek.quizDegree : null,
+          comment: defaultWeek.comment || null,
+          message_state: defaultWeek.message_state !== undefined ? defaultWeek.message_state : false
+        };
+      }
     }
     return rawStudent;
   }, [rawStudent, selectedWeek]);
@@ -431,10 +487,45 @@ export default function QR() {
     setNoQuiz(false);
     setNotCompleted(false);
     setWeekComment(""); // Clear week comment when context changes
+    setHomeworkDegree(""); // Clear homework degree inputs when context changes
+    // Only clear homeworkDegreeOutOf if there's no remembered value from session storage
+    const rememberedHomeworkOutOf = sessionStorage.getItem('lastHomeworkOutOf');
+    if (!rememberedHomeworkOutOf) {
+      setHomeworkDegreeOutOf("");
+    }
     
     // Load current week's comment from student when available
     try {
-      const degreeRaw = (student?.quizDegree ?? '').toString().trim();
+      // Always read directly from rawStudent.weeks as source of truth (like quiz badge does)
+      let dbQuizDegree = null;
+      let dbHwDone = null;
+      let dbHwDegree = null;
+      
+      if (rawStudent?.weeks && selectedWeek) {
+        const weekNumber = getWeekNumber(selectedWeek);
+        if (weekNumber) {
+          const weekData = rawStudent.weeks.find(w => w && w.week === weekNumber);
+          if (weekData) {
+            dbQuizDegree = weekData.quizDegree;
+            dbHwDone = weekData.hwDone;
+            dbHwDegree = weekData.hwDegree;
+          }
+        }
+      }
+      
+      // Fallback to student object if rawStudent.weeks doesn't have it
+      if (dbQuizDegree === null || dbQuizDegree === undefined) {
+        dbQuizDegree = student?.quizDegree;
+      }
+      if (dbHwDone === null || dbHwDone === undefined) {
+        dbHwDone = student?.hwDone;
+      }
+      if (dbHwDegree === null || dbHwDegree === undefined) {
+        dbHwDegree = student?.hwDegree;
+      }
+      
+      // Sync quiz degree inputs from database
+      const degreeRaw = (dbQuizDegree ?? '').toString().trim();
       const normalized = degreeRaw.toLowerCase().replace(/[''`]/g, '');
     
       const didntAttendTarget = "didnt attend the quiz";
@@ -458,11 +549,27 @@ export default function QR() {
       }
 
       // Sync "No Homework" and "Not Completed" checkboxes with database value
-      const hwValue = student?.hwDone;
-      setNoHomework(hwValue === "No Homework");
-      setNotCompleted(hwValue === "Not Completed");
-    } catch {}    
-  }, [student?.id, selectedWeek, attendanceCenter]);
+      setNoHomework(dbHwDone === "No Homework");
+      setNotCompleted(dbHwDone === "Not Completed");
+
+      // Sync homework degree inputs when value like "8 / 10" - read from rawStudent.weeks
+      const homeworkDegreeRaw = (dbHwDegree ?? '').toString().trim();
+      const homeworkMatch = homeworkDegreeRaw.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/i);
+      if (homeworkMatch) {
+        setHomeworkDegree(homeworkMatch[1]);
+        setHomeworkDegreeOutOf(homeworkMatch[2]);
+      } else if (homeworkDegreeRaw === '' || homeworkDegreeRaw == null) {
+        setHomeworkDegree('');
+        // Only clear homeworkDegreeOutOf if there's no remembered value from session storage
+        const rememberedHomeworkOutOf = sessionStorage.getItem('lastHomeworkOutOf');
+        if (!rememberedHomeworkOutOf) {
+          setHomeworkDegreeOutOf('');
+        }
+      }
+    } catch {
+      console.error('Error syncing student data');
+    }    
+  }, [rawStudent, student?.id, selectedWeek, attendanceCenter]);
 
   // Load week comment from student data when week changes
   useEffect(() => {
@@ -484,6 +591,23 @@ export default function QR() {
       console.log('Quiz out of restored from session storage:', rememberedQuizOutOf);
     }
   }, [quizDegreeOutOf]);
+
+  // Ensure homework degree "out of" value is loaded from session storage when component mounts
+  useEffect(() => {
+    const rememberedHomeworkOutOf = sessionStorage.getItem('lastHomeworkOutOf');
+    if (rememberedHomeworkOutOf && !homeworkDegreeOutOf) {
+      setHomeworkDegreeOutOf(rememberedHomeworkOutOf);
+      console.log('Homework out of restored from session storage:', rememberedHomeworkOutOf);
+    }
+  }, [homeworkDegreeOutOf]);
+
+  // Auto-hide homework degree success after 4 seconds
+  useEffect(() => {
+    if (homeworkDegreeSuccess) {
+      const timer = setTimeout(() => setHomeworkDegreeSuccess("") , 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [homeworkDegreeSuccess]);
 
   // Auto-attend student when conditions are met (ONLY for QR scans with pre-selected center/week)
   useEffect(() => {
@@ -622,6 +746,18 @@ export default function QR() {
     
     const weekNumber = getWeekNumber(selectedWeek);
     
+    // If marking as false, also clear homework degree
+    if (newHwDone === false) {
+      // Clear homework degree inputs
+      setHomeworkDegree("");
+      setHomeworkDegreeOutOf("");
+      // Clear homework degree in database
+      updateHomeworkDegreeMutation.mutate({
+        id: student.id,
+        homeworkDegreeData: { hwDegree: null, week: weekNumber }
+      });
+    }
+    
     updateHomeworkMutation.mutate({
       id: student.id,
       homeworkData: { hwDone: newHwDone, week: weekNumber }
@@ -635,6 +771,63 @@ export default function QR() {
   };
 
   
+
+  // Add form handler for homework degree
+  const handleHomeworkDegreeFormSubmit = async (e) => {
+    e.preventDefault();
+    await handleHomeworkDegreeSubmit();
+  };
+
+  const handleHomeworkDegreeSubmit = async () => {
+    if (!student || !selectedWeek || !attendanceCenter) return;
+    if (student.account_deactivated) return; // Don't allow homework degree updates for deactivated accounts
+    
+    // Check if student is attended - can't enter homework degree if not attended
+    const currentAttended = optimisticAttended !== null ? optimisticAttended : student.attended_the_session;
+    if (!currentAttended) {
+      setError("Student Must be Marked as Attended before homework degree can be entered.");
+      return;
+    }
+    
+    // If both inputs are empty, save null
+    if (homeworkDegree === "" && homeworkDegreeOutOf === "") {
+      const weekNumber = getWeekNumber(selectedWeek);
+      updateHomeworkDegreeMutation.mutate(
+        {
+          id: student.id,
+          homeworkDegreeData: { hwDegree: null, week: weekNumber }
+        },
+        {
+          onSuccess: () => {
+            setHomeworkDegreeSuccess('✅ Homework Degree cleared successfully');
+          }
+        }
+      );
+      return;
+    }
+    
+    // If only one input is filled, show error
+    if ((homeworkDegree === "" && homeworkDegreeOutOf !== "") || (homeworkDegree !== "" && homeworkDegreeOutOf === "")) {
+      setError("Please fill both degree and out of fields, or leave both empty to clear.");
+      return;
+    }
+    
+    const homeworkDegreeValue = `${homeworkDegree} / ${homeworkDegreeOutOf}`;
+    const weekNumber = getWeekNumber(selectedWeek);
+    
+    updateHomeworkDegreeMutation.mutate(
+      {
+        id: student.id,
+        homeworkDegreeData: { hwDegree: homeworkDegreeValue, week: weekNumber }
+      },
+      {
+        onSuccess: () => {
+          setHomeworkDegreeSuccess('✅ Homework Degree set successfully');
+        }
+      }
+    );
+    // Do not clear inputs; keep values visible after save
+  };
 
   // Add form handler for quiz degree
   const handleQuizFormSubmit = async (e) => {
@@ -1356,42 +1549,168 @@ export default function QR() {
                   ? '✅ Attended' 
                   : '❌ Absent'}
             </span>
-            <span className={`status-badge ${(!attendanceCenter || !selectedWeek)
-              ? 'status-not-attended'
-              : noHomework || (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === "No Homework"
-                ? 'status-no-homework'
-                : notCompleted || (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === "Not Completed"
-                  ? 'status-incomplete'
-                  : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone)
-                    ? 'status-attended'
-                    : 'status-not-attended'}`}>
-              {(!attendanceCenter || !selectedWeek)
-                ? '❌ Homework: Not Done'
-                : noHomework || (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === "No Homework"
-                  ? '🚫 Homework: No Homework'
-                  : notCompleted || (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === "Not Completed"
-                    ? '⚠️ Homework: Not Completed'
-                    : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone)
-                      ? '✅ Homework: Done'
-                      : '❌ Homework: Not Done'}
+            <span className={`status-badge ${(() => {
+              // Always read from database - try rawStudent.weeks first, then fallback to student object
+              let dbHwDone = null;
+              
+              // Determine which week to use
+              let weekNumber = null;
+              if (selectedWeek) {
+                weekNumber = getWeekNumber(selectedWeek);
+              } else if (rawStudent?.weeks && rawStudent.weeks.length > 0) {
+                // If no selectedWeek, try to use week 1 or first available week
+                const week1Data = rawStudent.weeks.find(w => w && w.week === 1);
+                if (week1Data) {
+                  weekNumber = 1;
+                } else {
+                  // Use first week in array
+                  const firstWeek = rawStudent.weeks[0];
+                  if (firstWeek && firstWeek.week) {
+                    weekNumber = firstWeek.week;
+                  }
+                }
+              }
+              
+              if (rawStudent?.weeks && weekNumber) {
+                const weekData = rawStudent.weeks.find(w => w && w.week === weekNumber);
+                if (weekData) {
+                  dbHwDone = weekData.hwDone;
+                }
+              }
+              
+              // Fallback to student object or optimistic update
+              const currentHwDone = optimisticHwDone !== null ? optimisticHwDone : (dbHwDone ?? student?.hwDone ?? false);
+              
+              // Determine badge style based on database value
+              if (currentHwDone === "No Homework") {
+                return 'status-no-homework';
+              }
+              if (currentHwDone === "Not Completed") {
+                return 'status-incomplete';
+              }
+              if (currentHwDone === true) {
+                return 'status-attended'; // Green background for done
+              }
+              return 'status-not-attended'; // Red background for not done
+            })()}`}>
+              {(() => {
+                // Always read from database - try rawStudent.weeks first, then fallback to student object
+                let dbHwDone = null;
+                let dbHwDegree = null;
+                
+                // Determine which week to use
+                let weekToUse = selectedWeek;
+                let weekNumber = null;
+                
+                if (weekToUse) {
+                  weekNumber = getWeekNumber(weekToUse);
+                } else if (rawStudent?.weeks && rawStudent.weeks.length > 0) {
+                  // If no selectedWeek, try to use week 1 or first available week
+                  const week1Data = rawStudent.weeks.find(w => w && w.week === 1);
+                  if (week1Data) {
+                    weekNumber = 1;
+                  } else {
+                    // Use first week in array
+                    const firstWeek = rawStudent.weeks[0];
+                    if (firstWeek && firstWeek.week) {
+                      weekNumber = firstWeek.week;
+                    }
+                  }
+                }
+                
+                // First, try to read directly from rawStudent.weeks (source of truth)
+                if (rawStudent?.weeks && weekNumber) {
+                  const weekData = rawStudent.weeks.find(w => w && w.week === weekNumber);
+                  if (weekData) {
+                    dbHwDone = weekData.hwDone;
+                    dbHwDegree = weekData.hwDegree;
+                  }
+                }
+                
+                // Fallback to student object (which should be populated by updateStudentWithWeekData)
+                if (dbHwDone === null || dbHwDone === undefined) {
+                  dbHwDone = student?.hwDone;
+                }
+                if (dbHwDegree === null || dbHwDegree === undefined) {
+                  dbHwDegree = student?.hwDegree;
+                }
+                
+                // Use optimistic update if available, otherwise use database value
+                const currentHwDone = optimisticHwDone !== null ? optimisticHwDone : (dbHwDone ?? false);
+                const currentHwDegree = dbHwDegree ?? null;
+                
+                // Debug log to see what values we're working with
+                console.log('🏷️ Homework badge rendering:', {
+                  hasRawStudent: !!rawStudent,
+                  hasWeeks: !!rawStudent?.weeks,
+                  selectedWeek,
+                  weekNumber,
+                  weekData: rawStudent?.weeks?.find(w => w && w.week === weekNumber),
+                  dbHwDone,
+                  dbHwDoneType: typeof dbHwDone,
+                  dbHwDegree,
+                  studentHwDone: student?.hwDone,
+                  studentHwDegree: student?.hwDegree,
+                  optimisticHwDone,
+                  currentHwDone,
+                  currentHwDoneType: typeof currentHwDone,
+                  currentHwDegree,
+                  rawStudentWeeks: rawStudent?.weeks
+                });
+                
+                // If no attendance center or week selected, still show database value if available
+                if (!attendanceCenter || !selectedWeek) {
+                  // Still try to show database value even if week/center not selected
+                  if (currentHwDone === true) {
+                    if (currentHwDegree && String(currentHwDegree).trim() !== '') {
+                      return `✅ Homework: Done (${currentHwDegree})`;
+                    }
+                    return '✅ Homework: Done';
+                  }
+                  if (currentHwDone === "No Homework") {
+                    return '🚫 Homework: No Homework';
+                  }
+                  if (currentHwDone === "Not Completed") {
+                    return '⚠️ Homework: Not Completed';
+                  }
+                  return '❌ Homework: Not Done';
+                }
+                
+                // Always check database value first
+                if (currentHwDone === "No Homework") {
+                  return '🚫 Homework: No Homework';
+                }
+                if (currentHwDone === "Not Completed") {
+                  return '⚠️ Homework: Not Completed';
+                }
+                // Show homework degree if hwDone is true (from database or optimistic)
+                // Check for boolean true explicitly - this is the key check
+                if (currentHwDone === true) {
+                  if (currentHwDegree && String(currentHwDegree).trim() !== '') {
+                    return `✅ Homework: Done (${currentHwDegree})`;
+                  }
+                  return '✅ Homework: Done';
+                }
+                return '❌ Homework: Not Done';
+              })()}
             </span>
             
             <span className={`status-badge ${(!attendanceCenter || !selectedWeek) 
               ? 'status-not-attended' 
-              : student.quizDegree === "Didn't Attend The Quiz"
+              : (student?.quizDegree ?? '') === "Didn't Attend The Quiz"
                 ? 'status-didnt-attend'
-                : student.quizDegree === "No Quiz"
+                : (student?.quizDegree ?? '') === "No Quiz"
                   ? 'status-no-homework'
-                  : student.quizDegree 
+                  : student?.quizDegree 
                     ? 'status-attended' 
                     : 'status-not-attended'}`}>
               {(!attendanceCenter || !selectedWeek) 
                 ? '❌ Quiz: ...' 
-                : student.quizDegree === "Didn't Attend The Quiz"
+                : (student?.quizDegree ?? '') === "Didn't Attend The Quiz"
                   ? '❌ Quiz: Didn\'t Attend'
-                : student.quizDegree === "No Quiz"
+                : (student?.quizDegree ?? '') === "No Quiz"
                   ? '🚫 Quiz: No Quiz'
-                : student.quizDegree 
+                : student?.quizDegree 
                   ? `✅ Quiz: ${student.quizDegree}` 
                   : '❌ Quiz: ...'}
             </span>
@@ -1466,6 +1785,7 @@ export default function QR() {
               <input
                 type="checkbox"
                 checked={notCompleted}
+                disabled={!attendanceCenter || !selectedWeek || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || rawStudent?.account_state === 'Deactivated'}
                 onChange={async (e) => {
                   const checked = e.target.checked;
                   setNotCompleted(checked);
@@ -1500,6 +1820,14 @@ export default function QR() {
                     if (noHomework) {
                       setNoHomework(false);
                     }
+                    // Clear homework degree inputs when "Not Completed" is selected
+                    setHomeworkDegree("");
+                    setHomeworkDegreeOutOf("");
+                    // Clear homework degree in database
+                    updateHomeworkDegreeMutation.mutate({
+                      id: student.id,
+                      homeworkDegreeData: { hwDegree: null, week: weekNumber }
+                    });
                     // ✅ Save "Not Completed" to DB
                     updateHomeworkMutation.mutate({
                       id: student.id,
@@ -1511,6 +1839,14 @@ export default function QR() {
                     });
                     setOptimisticHwDone(false);
                   } else {
+                    // Clear homework degree inputs when unchecked
+                    setHomeworkDegree("");
+                    setHomeworkDegreeOutOf("");
+                    // Clear homework degree in database
+                    updateHomeworkDegreeMutation.mutate({
+                      id: student.id,
+                      homeworkDegreeData: { hwDegree: null, week: weekNumber }
+                    });
                     // ✅ Reset to false when unchecked
                     updateHomeworkMutation.mutate({
                       id: student.id,
@@ -1531,6 +1867,7 @@ export default function QR() {
               <input
                 type="checkbox"
                 checked={noHomework}
+                disabled={!attendanceCenter || !selectedWeek || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || rawStudent?.account_state === 'Deactivated'}
                 onChange={async (e) => {
                   const checked = e.target.checked;
                   setNoHomework(checked);
@@ -1565,6 +1902,14 @@ export default function QR() {
                     if (notCompleted) {
                       setNotCompleted(false);
                     }
+                    // Clear homework degree inputs when "No Homework" is selected
+                    setHomeworkDegree("");
+                    setHomeworkDegreeOutOf("");
+                    // Clear homework degree in database
+                    updateHomeworkDegreeMutation.mutate({
+                      id: student.id,
+                      homeworkDegreeData: { hwDegree: null, week: weekNumber }
+                    });
                     // ✅ Save "No Homework" to DB
                     updateHomeworkMutation.mutate({
                       id: student.id,
@@ -1576,6 +1921,14 @@ export default function QR() {
                     });
                     setOptimisticHwDone(false);
                   } else {
+                    // Clear homework degree inputs when unchecked
+                    setHomeworkDegree("");
+                    setHomeworkDegreeOutOf("");
+                    // Clear homework degree in database
+                    updateHomeworkDegreeMutation.mutate({
+                      id: student.id,
+                      homeworkDegreeData: { hwDegree: null, week: weekNumber }
+                    });
                     // ✅ Reset to false when unchecked
                     updateHomeworkMutation.mutate({
                       id: student.id,
@@ -1602,7 +1955,9 @@ export default function QR() {
                   background: (!attendanceCenter || !selectedWeek)
                     ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)'
                     : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)
-                        ? 'linear-gradient(135deg, #6c757d 0%, #495057 100%)'
+                        ? ((optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === true
+                            ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)'
+                            : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)')
                       : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone)
                         ? 'linear-gradient(135deg, #dc3545 0%, #e74c3c 100%)'
                         : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
@@ -1617,14 +1972,131 @@ export default function QR() {
                   transition: 'all 0.3s ease'
                 }}
               >
-                {(!attendanceCenter || !selectedWeek)
-                  ? '✅ Mark as H.W Done'
-                  : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)
-                    ? '🚫 Must Attend First'
-                    : (optimisticHwDone !== null ? optimisticHwDone : student.hwDone)
-                      ? '❌ Mark as H.W Not Done'
-                      : '✅ Mark as H.W Done'}
+                {(() => {
+                  if (!attendanceCenter || !selectedWeek) {
+                    return '✅ Mark as H.W Done';
+                  }
+                  const currentAttended = optimisticAttended !== null ? optimisticAttended : (student?.attended_the_session ?? false);
+                  // Always use database value, but allow optimistic updates when available
+                  const currentHwDone = optimisticHwDone !== null ? optimisticHwDone : (student?.hwDone ?? false);
+                  const currentHwDegree = student?.hwDegree ?? null;
+                  
+                  if (!currentAttended) {
+                    // Show DB state even when not attended, but indicate it's disabled
+                    if (currentHwDone === true) {
+                      if (currentHwDegree && String(currentHwDegree).trim() !== '') {
+                        return `❌ Mark as H.W Not Done (${currentHwDegree})`;
+                      }
+                      return '❌ Mark as H.W Not Done';
+                    }
+                    return '✅ Mark as H.W Done';
+                  }
+                  
+                  // When attended, show current state
+                  if (currentHwDone === true) {
+                    // Show homework degree if it exists
+                    if (currentHwDegree && String(currentHwDegree).trim() !== '') {
+                      return `❌ Mark as H.W Not Done (${currentHwDegree})`;
+                    }
+                    return '❌ Mark as H.W Not Done';
+                  }
+                  return '✅ Mark as H.W Done';
+                })()}
               </button>
+            )}
+
+            {/* Homework Degree Input Section - Show when homework is done (even if not attended, but disabled) */}
+            {!noHomework && !notCompleted && (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === true && (
+              <div
+                className="info-label"
+                style={{
+                  marginBottom: 0,
+                  marginTop: 0,
+                  textAlign: 'start',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                  rowGap: 6,
+                  columnGap: 12,
+                }}
+              >
+                <span>Homework Degree : (Optional)</span>
+              </div>
+            )}
+            {!noHomework && !notCompleted && (optimisticHwDone !== null ? optimisticHwDone : student.hwDone) === true && (
+              <form onSubmit={handleHomeworkDegreeFormSubmit} className="quiz-row">
+                <div className="quiz-inputs-container">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className="manual-input quiz-input"
+                    placeholder={
+                      (!selectedWeek || !attendanceCenter) ? "Select week and center first..." 
+                      : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? "Must attend first..."
+                      : "degree ..."
+                    }
+                    value={homeworkDegree}
+                    onChange={e => setHomeworkDegree(e.target.value)}
+                    disabled={updateHomeworkDegreeMutation.isPending || !selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || rawStudent?.account_state === 'Deactivated'}
+                    style={{
+                      opacity: (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)) ? 0.5 : 1,
+                      cursor: (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)) ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className="manual-input quiz-input"
+                    placeholder={
+                      (!selectedWeek || !attendanceCenter) ? "Select week and center first..." 
+                      : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? "Must attend first..."
+                      : "out of ..."
+                    }
+                    value={homeworkDegreeOutOf}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setHomeworkDegreeOutOf(value);
+                      // Save to session storage if value is not empty, otherwise remove it
+                      if (value.trim() !== '') {
+                        sessionStorage.setItem('lastHomeworkOutOf', value);
+                        console.log('Homework out of saved to session storage:', value);
+                      } else {
+                        sessionStorage.removeItem('lastHomeworkOutOf');
+                        console.log('Homework out of removed from session storage');
+                      }
+                    }}
+                    disabled={updateHomeworkDegreeMutation.isPending || !selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || rawStudent?.account_state === 'Deactivated'}
+                    style={{
+                      opacity: (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)) ? 0.5 : 1,
+                      cursor: (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session)) ? 'not-allowed' : 'text'
+                    }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="fetch-btn quiz-btn"
+                  disabled={updateHomeworkDegreeMutation.isPending || (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || rawStudent?.account_state === 'Deactivated') || ((homeworkDegree === "" && homeworkDegreeOutOf !== "") || (homeworkDegree !== "" && homeworkDegreeOutOf === ""))}
+                  style={{
+                    opacity: (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || ((homeworkDegree === "" && homeworkDegreeOutOf !== "") || (homeworkDegree !== "" && homeworkDegreeOutOf === ""))) ? 0.5 : 1,
+                    cursor: (!selectedWeek || !attendanceCenter || !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) || ((homeworkDegree === "" && homeworkDegreeOutOf !== "") || (homeworkDegree !== "" && homeworkDegreeOutOf === ""))) ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                  title={
+                    !selectedWeek ? 'Please select a week first' 
+                    : !attendanceCenter ? 'Please select an attendance center first' 
+                    : !(optimisticAttended !== null ? optimisticAttended : student.attended_the_session) ? 'Student must attend first'
+                    : ((homeworkDegree === "" && homeworkDegreeOutOf !== "") || (homeworkDegree !== "" && homeworkDegreeOutOf === "")) ? 'Please fill both fields or leave both empty' 
+                    : ''
+                  }
+                >
+                  {updateHomeworkDegreeMutation.isPending ? 'Saving...' : 'Save H.W Degree'}
+                </button>
+              </form>
             )}
 
             
@@ -1939,7 +2411,7 @@ export default function QR() {
 
 
       {/* Success messages displayed right after the student card */}
-      {student && selectedWeek && attendanceCenter && (quizSuccess || commentSuccess || hwSuccess || attendanceSuccess) && (
+      {student && selectedWeek && attendanceCenter && (quizSuccess || commentSuccess || hwSuccess || attendanceSuccess || homeworkDegreeSuccess) && (
         <div style={{ maxWidth: 600, margin: '12px auto 0 auto' }}>
           {quizSuccess && (
             <div className="success-message">
@@ -1954,6 +2426,11 @@ export default function QR() {
           {hwSuccess && (
             <div className="success-message" style={{ marginTop: 10 }}>
               {hwSuccess}
+            </div>
+          )}
+          {homeworkDegreeSuccess && (
+            <div className="success-message" style={{ marginTop: 10 }}>
+              {homeworkDegreeSuccess}
             </div>
           )}
           {attendanceSuccess && (

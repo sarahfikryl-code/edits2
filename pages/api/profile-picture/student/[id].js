@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { authMiddleware } from '../../../../lib/authMiddleware';
 import { getSignedImageUrlServer } from '../../../../lib/cloudinary';
+import { verifySignature } from '../../../../lib/hmac';
 
 // Load environment variables from env.config
 function loadEnvConfig() {
@@ -48,15 +49,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Verify authentication (admin/assistant/developer only)
-    const user = await authMiddleware(req);
+    const { id, sig } = req.query;
     
-    // Only allow admin, assistant, or developer to view student profile pictures
-    if (user.role !== 'admin' && user.role !== 'assistant' && user.role !== 'developer') {
-      return res.status(403).json({ error: 'Forbidden' });
+    console.log('📸 Profile Picture API Request:', { id, hasSig: !!sig });
+    
+    // Check if this is a public access request (with HMAC signature)
+    let isPublicAccess = false;
+    if (sig) {
+      const studentIdFromQuery = String(id || '').trim();
+      const signature = String(sig).trim();
+      
+      console.log('🔍 Verifying profile picture signature:', { studentIdFromQuery, signatureLength: signature.length });
+      
+      if (studentIdFromQuery && signature) {
+        isPublicAccess = verifySignature(studentIdFromQuery, signature);
+        console.log('🔍 Profile picture signature verification result:', isPublicAccess);
+        if (!isPublicAccess) {
+          console.log('❌ Profile picture: Invalid signature');
+          return res.status(401).json({ error: 'Invalid signature' });
+        }
+      } else {
+        console.log('❌ Profile picture: Missing studentId or signature');
+      }
+    } else {
+      console.log('📸 Profile picture: No signature provided, checking authentication');
     }
     
-    const { id } = req.query;
+    // If not public access, verify authentication (admin/assistant/developer only)
+    let user = null;
+    if (!isPublicAccess) {
+      try {
+        user = await authMiddleware(req);
+        
+        // Only allow admin, assistant, or developer to view student profile pictures
+        if (user.role !== 'admin' && user.role !== 'assistant' && user.role !== 'developer') {
+          return res.status(403).json({ error: 'Forbidden' });
+        }
+      } catch (authError) {
+        // If authentication fails and no signature provided, return 401
+        if (!sig) {
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // If signature is provided but invalid, already handled above
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+    }
     
     if (!id) {
       return res.status(400).json({ error: 'Student ID is required' });
@@ -99,17 +136,42 @@ export default async function handler(req, res) {
         return res.status(200).json({ url: null });
       }
       
-      // Generate signed URL
-      console.log('🖼️ Generating signed URL for:', userDoc.profile_picture);
-      const signedUrl = await getSignedImageUrlServer(userDoc.profile_picture);
+      // Generate signed URL - use the same method for both authenticated and public access
+      const publicId = userDoc.profile_picture;
       
-      if (!signedUrl) {
-        console.error('❌ Failed to generate signed URL');
-        return res.status(500).json({ error: 'Failed to generate image URL' });
+      console.log('🖼️ Generating signed URL for public_id:', publicId, {
+        isPublicAccess,
+        hasAuth: !!user
+      });
+      
+      try {
+        // Use the same URL generation for both authenticated and public access
+        const signedUrl = await getSignedImageUrlServer(publicId);
+        
+        if (!signedUrl) {
+          console.error('❌ Failed to generate signed URL - getSignedImageUrlServer returned null');
+          return res.status(500).json({ error: 'Failed to generate image URL' });
+        }
+        
+        console.log('✅ Signed URL generated successfully');
+        console.log('🔗 Generated URL:', signedUrl);
+        console.log('🔍 URL details:', {
+          publicId,
+          urlLength: signedUrl.length,
+          hasSignature: signedUrl.includes('/s--'),
+          isPublicAccess
+        });
+        
+        res.status(200).json({ url: signedUrl });
+      } catch (urlError) {
+        console.error('❌ Error generating signed URL:', {
+          error: urlError.message,
+          stack: urlError.stack,
+          publicId: publicId,
+          isPublicAccess
+        });
+        return res.status(500).json({ error: 'Failed to generate image URL', details: urlError.message });
       }
-      
-      console.log('✅ Signed URL generated successfully');
-      res.status(200).json({ url: signedUrl });
       
     } finally {
       if (client) await client.close();
