@@ -62,15 +62,40 @@ export default async function handler(req, res) {
 
     const onlineHomeworks = student.online_homeworks || [];
     
+    // Find the homework to get the week number
+    const homeworkToReset = onlineHomeworks.find(
+      hw => hw.homework_id === homework_id
+    );
+    
     // Remove the homework from the array
     const updatedHomeworks = onlineHomeworks.filter(
       hw => hw.homework_id !== homework_id
     );
 
+    // Update weeks array if homework was found and has a week number
+    const weeks = student.weeks || [];
+    let updatedWeeks = weeks;
+    
+    if (homeworkToReset && homeworkToReset.week !== undefined && homeworkToReset.week !== null) {
+      updatedWeeks = weeks.map(weekData => {
+        if (weekData.week === homeworkToReset.week) {
+          return {
+            ...weekData,
+            hwDone: false,
+            hwDegree: null
+          };
+        }
+        return weekData;
+      });
+    }
+
     // Update student document
     const updateResult = await db.collection('students').updateOne(
       { id: student_id },
-      { $set: { online_homeworks: updatedHomeworks } }
+      { $set: { 
+        online_homeworks: updatedHomeworks,
+        weeks: updatedWeeks
+      } }
     );
 
     if (updateResult.matchedCount === 0) {

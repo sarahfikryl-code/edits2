@@ -100,7 +100,7 @@ We want to inform you that we are in:
           if (hwDegree && String(hwDegree).trim() !== '') {
             homeworkStatus = `Done (${hwDegree})`;
           } else {
-            homeworkStatus = 'Done';
+          homeworkStatus = 'Done';
           }
         } else if (student.hwDone === false) {
           homeworkStatus = 'Not Done';
@@ -134,13 +134,15 @@ We want to inform you that we are in:
       const publicLink = generatePublicStudentLink(student.id.toString());
 
       whatsappMessage += `
-      
+
+Please visit the following link to check ${firstName}'s grades and progress: ⬇️
+
+🖇️ ${publicLink}
+
 Note :-
   • ${firstName}'s ID: ${student.id}
 
-🖇️ Track Attendance: ${publicLink}
-
-We are always happy to stay in touch 😊❤
+We wish ${firstName} gets high scores 😊❤
 
 – Tony Joseph Demo attendance system`;
 

@@ -86,7 +86,7 @@ export default function StudentInfo() {
           console.log('✅ HMAC signature is valid');
           setStudentId(studentIdFromUrl);
           setIsValidSignature(true);
-          
+  
           // If user has token, also set searchId to fetch via authenticated API
           if (hasAuthToken) {
             setSearchId(studentIdFromUrl);
@@ -690,76 +690,76 @@ export default function StudentInfo() {
 
         {/* Only show search form if authenticated */}
         {hasAuthToken && (
-          <div className="form-container">
-            <form onSubmit={handleIdSubmit} className="fetch-form">
-              <input
-                className="fetch-input"
-                type="text"
+        <div className="form-container">
+          <form onSubmit={handleIdSubmit} className="fetch-form">
+            <input
+              className="fetch-input"
+              type="text"
                 placeholder="Enter Student ID, Name, Phone Number"
-                value={studentId}
-                onChange={handleIdChange}
-                required
-              />
+              value={studentId}
+              onChange={handleIdChange}
+              required
+            />
               <button type="submit" className="fetch-btn" disabled={currentStudentLoading}>
                 {currentStudentLoading ? "Loading..." : "🔍 Search"}
-              </button>
-            </form>
-            
-            {/* Show search results if multiple matches found */}
-            {showSearchResults && searchResults.length > 0 && (
+        </button>
+          </form>
+          
+          {/* Show search results if multiple matches found */}
+          {showSearchResults && searchResults.length > 0 && (
+            <div style={{ 
+              marginTop: "16px", 
+              padding: "16px", 
+              background: "#f8f9fa", 
+              borderRadius: "8px", 
+              border: "1px solid #dee2e6" 
+            }}>
               <div style={{ 
-                marginTop: "16px", 
-                padding: "16px", 
-                background: "#f8f9fa", 
-                borderRadius: "8px", 
-                border: "1px solid #dee2e6" 
+                marginBottom: "12px", 
+                fontWeight: "600", 
+                color: "#495057" 
               }}>
-                <div style={{ 
-                  marginBottom: "12px", 
-                  fontWeight: "600", 
-                  color: "#495057" 
-                }}>
-                  Select a student:
-                </div>
-                {searchResults.map((student) => (
-                  <button
-                    key={student.id}
-                    onClick={() => handleStudentSelect(student)}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      padding: "12px 16px",
-                      margin: "8px 0",
-                      background: "white",
-                      border: "1px solid #dee2e6",
-                      borderRadius: "6px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease"
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.background = "#e9ecef";
-                      e.target.style.borderColor = "#1FA8DC";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.background = "white";
-                      e.target.style.borderColor = "#dee2e6";
-                    }}
-                  >
-                    <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
-                      {student.name} (ID: {student.id})
-                    </div>
+                Select a student:
+              </div>
+              {searchResults.map((student) => (
+                <button
+                  key={student.id}
+                  onClick={() => handleStudentSelect(student)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "12px 16px",
+                    margin: "8px 0",
+                    background: "white",
+                    border: "1px solid #dee2e6",
+                    borderRadius: "6px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = "#e9ecef";
+                    e.target.style.borderColor = "#1FA8DC";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = "white";
+                    e.target.style.borderColor = "#dee2e6";
+                  }}
+                >
+                  <div style={{ fontWeight: "600", color: "#1FA8DC" }}>
+                    {student.name} (ID: {student.id})
+                  </div>
                     <div style={{ fontSize: "0.9rem", color: "#495057", marginTop: 4 }}>
                       <span style={{ fontFamily: 'monospace' }}>{student.phone || 'N/A'}</span>
                     </div>
                     <div style={{ fontSize: "0.9rem", color: "#6c757d", marginTop: 2 }}>
-                      {student.grade} • {student.main_center}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                    {student.grade} • {student.main_center}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         )}
         
         {/* Welcome title for public access (no token) */}
@@ -792,32 +792,32 @@ export default function StudentInfo() {
                   gap: '12px',
                   gridColumn: '1 / -1'
                 }}>
-                  <div className="detail-label" style={{ textAlign: 'center', width: '100%' }}>Profile Picture</div>
-                  {profilePictureUrl ? (
-                    <div
-                      style={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: '50%',
-                        background: '#e9ecef',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
-                        border: '2px solid #1FA8DC',
-                        overflow: 'hidden',
-                        position: 'relative'
-                      }}
-                    >
-                      <img
-                        src={profilePictureUrl}
-                        alt="Profile"
-                        onError={(e) => {
+                <div className="detail-label" style={{ textAlign: 'center', width: '100%' }}>Profile Picture</div>
+                {profilePictureUrl ? (
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: '50%',
+                      background: '#e9ecef',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
+                      border: '2px solid #1FA8DC',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}
+                  >
+                    <img
+                      src={profilePictureUrl}
+                      alt="Profile"
+                      onError={(e) => {
                           console.error('❌ Image failed to load (404):', profilePictureUrl);
                           // Hide the img element and show placeholder instead
                           const container = e.target.closest('div');
                           if (container) {
-                            e.target.style.display = 'none';
+                        e.target.style.display = 'none';
                             // Show placeholder with first letter
                             const placeholder = document.createElement('span');
                             placeholder.style.cssText = `
@@ -837,55 +837,55 @@ export default function StudentInfo() {
                               : '?';
                             container.appendChild(placeholder);
                           }
-                        }}
-                        onLoad={() => {
-                          console.log('✅ Image loaded successfully:', profilePictureUrl);
-                        }}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                          borderRadius: '50%'
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: '50%',
-                        background: '#e9ecef',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
-                        border: '2px solid #e9ecef',
-                        position: 'relative'
                       }}
-                    >
-                      <span style={{ 
-                        fontWeight: 700, 
-                        fontSize: 36, 
-                        color: '#adb5bd',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                      onLoad={() => {
+                        console.log('✅ Image loaded successfully:', profilePictureUrl);
+                      }}
+                      style={{
                         width: '100%',
                         height: '100%',
-                        lineHeight: 1,
-                        textAlign: 'center'
-                      }}>
+                        objectFit: 'cover',
+                        borderRadius: '50%'
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: '50%',
+                      background: '#e9ecef',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(31,168,220,0.15)',
+                      border: '2px solid #e9ecef',
+                      position: 'relative'
+                    }}
+                  >
+                    <span style={{ 
+                      fontWeight: 700, 
+                      fontSize: 36, 
+                      color: '#adb5bd',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      height: '100%',
+                      lineHeight: 1,
+                      textAlign: 'center'
+                    }}>
                         {currentStudent?.name && currentStudent.name.length > 0 ? currentStudent.name[0].toUpperCase() : '?'}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                    </span>
+                  </div>
+                )}
+              </div>
               )}
 
               {/* Only show Student ID if user doesn't have token */}
               {!hasAuthToken && (
-                <div className="detail-item">
+              <div className="detail-item">
                   <div className="detail-label">Student ID</div>
                   <div className="detail-value">{currentStudent.id}</div>
                 </div>
@@ -908,15 +908,15 @@ export default function StudentInfo() {
                   <div className="detail-value" style={{ fontFamily: 'monospace' }}>{userEmail}</div>
                 </div>
               )}
-              <div className="detail-item">
+                <div className="detail-item">
                 <div className="detail-label">School</div>
                 <div className="detail-value">{currentStudent.school || 'N/A'}</div>
-              </div>
+                </div>
               {currentStudent?.address && (
-                <div className="detail-item">
+              <div className="detail-item">
                   <div className="detail-label">Address</div>
                   <div className="detail-value">{currentStudent.address || 'N/A'}</div>
-                </div>
+              </div>
               )}
               <div className="detail-item">
                 <div className="detail-label">Main Center</div>
@@ -927,13 +927,13 @@ export default function StudentInfo() {
                 <div className="detail-value">{currentStudent.grade || currentStudent.course || 'N/A'}</div>
               </div>
               {currentStudent?.courseType && (
-                <div className="detail-item">
+              <div className="detail-item">
                   <div className="detail-label">Course Type</div>
                   <div className="detail-value">{currentStudent.courseType || 'N/A'}</div>
-                </div>
+              </div>
               )}
               {hasAuthToken && currentStudent?.payment?.numberOfSessions !== undefined && (
-                <div className="detail-item">
+              <div className="detail-item">
                   <div className="detail-label">Available Number of Sessions</div>
                   <div className="detail-value" style={{ 
                     color: (currentStudent.payment?.numberOfSessions || 0) <= 2 ? '#dc3545' : '#212529',
@@ -959,28 +959,28 @@ export default function StudentInfo() {
                     }}>
                       sessions
                     </span>
-                  </div>
+              </div>
                 </div>
               )}
               {hasAuthToken && (
-                <div className="detail-item">
+              <div className="detail-item">
                   <div className="detail-label">Hidden Comment</div>
                   <div className="detail-value" style={{ fontSize: '1rem' }}>
                     {currentStudent.main_comment || 'No Comment'}
                   </div>
-                </div>
+              </div>
               )}
               {hasAuthToken && (
-                <div className="detail-item">
-                  <div className="detail-label">Account Status</div>
-                  <div className="detail-value" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+              <div className="detail-item">
+                <div className="detail-label">Account Status</div>
+                <div className="detail-value" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
                     {currentStudent.account_state === 'Deactivated' ? (
-                      <span style={{ color: '#dc3545' }}>❌ Deactivated</span>
-                    ) : (
-                      <span style={{ color: '#28a745' }}>✅ Activated</span>
-                    )}
-                  </div>
+                    <span style={{ color: '#dc3545' }}>❌ Deactivated</span>
+                  ) : (
+                    <span style={{ color: '#28a745' }}>✅ Activated</span>
+                  )}
                 </div>
+              </div>
               )}
               {(() => {
                 const totals = getTotals();

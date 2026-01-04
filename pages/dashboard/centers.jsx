@@ -184,30 +184,10 @@ export default function Centers() {
       return;
     }
     
-    if (!newCenterLocation.trim()) {
-      setError('Location is required');
-      return;
-    }
-    
-    // Validate: if grade is selected, day, time and period are required
-    for (let i = 0; i < newCenterGrades.length; i++) {
-      const gradeData = newCenterGrades[i];
-      if (gradeData.grade && gradeData.grade.trim() !== '') {
-        for (let j = 0; j < gradeData.timings.length; j++) {
-          const timing = gradeData.timings[j];
-          const timeParts = (timing.time || '').split(':');
-          if (!timing.day || !timing.day.trim() || !timeParts[0] || !timeParts[1] || !timing.period) {
-            setError('Day, Time and Period are required when a grade is selected');
-            return;
-          }
-        }
-      }
-    }
-    
     const processedGrades = processGrades(newCenterGrades);
     createMutation.mutate({
       name: newCenterName.trim(),
-      location: newCenterLocation.trim(),
+      location: newCenterLocation.trim() || '',
       grades: processedGrades
     });
   };
@@ -241,32 +221,12 @@ export default function Centers() {
       return;
     }
     
-    if (!editLocation.trim()) {
-      setError('Location is required');
-      return;
-    }
-    
-    // Validate: if grade is selected, day, time and period are required
-    for (let i = 0; i < editGrades.length; i++) {
-      const gradeData = editGrades[i];
-      if (gradeData.grade && gradeData.grade.trim() !== '') {
-        for (let j = 0; j < gradeData.timings.length; j++) {
-          const timing = gradeData.timings[j];
-          const timeParts = (timing.time || '').split(':');
-          if (!timing.day || !timing.day.trim() || !timeParts[0] || !timeParts[1] || !timing.period) {
-            setError('Day, Time and Period are required when a grade is selected');
-            return;
-          }
-        }
-      }
-    }
-    
     const processedGrades = processGrades(editGrades);
     updateMutation.mutate({ 
       id: editingCenter.id, 
       data: {
         name: editName.trim(),
-        location: editLocation.trim(),
+        location: editLocation.trim() || '',
         grades: processedGrades
       }
     });
@@ -886,14 +846,13 @@ export default function Centers() {
                 />
               </div>
               <div className="form-field">
-                <label>Location <span className="required-star">*</span></label>
+                <label>Location</label>
                 <input
                   type="text"
                   value={newCenterLocation}
                   onChange={(e) => setNewCenterLocation(e.target.value)}
                   placeholder="copy the location link from google maps and paste here"
                   className="add-center-input"
-                  required
                 />
               </div>
 
@@ -944,7 +903,6 @@ export default function Centers() {
                                   updated[gradeIndex].timings[timingIndex].dayOpen = false;
                                   setNewCenterGrades(updated);
                                 }}
-                                required={gradeData.grade && gradeData.grade.trim() !== ''}
                               />
                             </div>
                             <div className="form-field timing-field">
@@ -963,7 +921,6 @@ export default function Centers() {
                                   }}
                                   placeholder="HH"
                                   className="time-hours-input"
-                                  required={gradeData.grade && gradeData.grade.trim() !== ''}
                                 />
                                 <span className="time-separator">:</span>
                                 <input
@@ -979,7 +936,6 @@ export default function Centers() {
                                   }}
                                   placeholder="MM"
                                   className="time-minutes-input"
-                                  required={gradeData.grade && gradeData.grade.trim() !== ''}
                                 />
                               </div>
                             </div>
@@ -1102,14 +1058,13 @@ export default function Centers() {
                 />
               </div>
               <div className="form-field">
-                <label>Location <span className="required-star">*</span></label>
+                <label>Location</label>
                 <input
                   type="text"
                   value={editLocation}
                   onChange={(e) => setEditLocation(e.target.value)}
                   placeholder="copy the location link from google maps and paste here"
                   className="rename-center-input"
-                  required
                 />
               </div>
 
@@ -1160,7 +1115,6 @@ export default function Centers() {
                                   updated[gradeIndex].timings[timingIndex].dayOpen = false;
                                   setEditGrades(updated);
                                 }}
-                                required={gradeData.grade && gradeData.grade.trim() !== ''}
                               />
                             </div>
                             <div className="form-field timing-field">
@@ -1179,7 +1133,6 @@ export default function Centers() {
                                   }}
                                   placeholder="HH"
                                   className="time-hours-input"
-                                  required={gradeData.grade && gradeData.grade.trim() !== ''}
                                 />
                                 <span className="time-separator">:</span>
                                 <input
@@ -1195,7 +1148,6 @@ export default function Centers() {
                                   }}
                                   placeholder="MM"
                                   className="time-minutes-input"
-                                  required={gradeData.grade && gradeData.grade.trim() !== ''}
                                 />
                               </div>
                             </div>

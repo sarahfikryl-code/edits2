@@ -770,18 +770,26 @@ export default function Login() {
             text-align: center;
             font-size: 1.5rem;
             font-weight: 700;
-            border: 2px solid #87CEEB;
-            border-radius: 12px;
-            background: #ffffff;
-            color: #000000;
+            border: 3px solid #87CEEB;
+            border-radius: 10px;
+            background: #f8f9fa;
+            color: #333;
             transition: all 0.3s ease;
+            box-shadow: 0 2px 6px rgba(135, 206, 235, 0.2);
+            outline: none;
           }
           .vac-input:focus {
             outline: none;
-            border-color: #87CEEB;
-            box-shadow: 0 0 0 4px rgba(135, 206, 235, 0.1);
+            border-color: #1FA8DC;
+            box-shadow: 0 0 0 4px rgba(31, 168, 220, 0.2);
+            background: #ffffff;
+            transform: scale(1.05);
           }
           .vac-input.error-border {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.1) !important;
+          }
+          .vac-input.error-border:focus {
             border-color: #dc3545 !important;
             box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1) !important;
           }
@@ -1202,6 +1210,21 @@ export default function Login() {
                   onKeyDown={(e) => handleOtpKeyDown(e, index)}
                   onPaste={(e) => handleOtpPaste(e, index)}
                   className={otpError ? 'vac-input error-border' : 'vac-input'}
+                  onFocus={(e) => {
+                    if (!e.target.classList.contains('error-border')) {
+                      e.target.style.borderColor = '#1FA8DC';
+                      e.target.style.boxShadow = '0 0 0 4px rgba(31, 168, 220, 0.2)';
+                      e.target.style.backgroundColor = '#ffffff';
+                      e.target.style.transform = 'scale(1.05)';
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const hasError = otpError && otpError.trim() !== '';
+                    e.target.style.borderColor = hasError ? '#dc3545' : '#87CEEB';
+                    e.target.style.boxShadow = hasError ? '0 0 0 2px rgba(220, 53, 69, 0.1)' : '0 2px 6px rgba(135, 206, 235, 0.2)';
+                    e.target.style.backgroundColor = '#f8f9fa';
+                    e.target.style.transform = 'scale(1)';
+                  }}
                 />
               ))}
             </div>

@@ -103,10 +103,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Center name is required' });
       }
 
-      if (!location || !location.trim()) {
-        return res.status(400).json({ error: 'Location is required' });
-      }
-
       // Check if center already exists
       const existingCenter = await db.collection('centers').findOne({ name: name.trim() });
       if (existingCenter) {
@@ -120,7 +116,7 @@ export default async function handler(req, res) {
       const newCenter = {
         id: nextId,
         name: name.trim(),
-        location: location.trim(),
+        location: location && location.trim() ? location.trim() : '',
         grades: grades && Array.isArray(grades) ? grades : [],
         createdAt: new Date()
       };

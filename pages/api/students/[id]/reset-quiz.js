@@ -62,15 +62,39 @@ export default async function handler(req, res) {
 
     const onlineQuizzes = student.online_quizzes || [];
     
+    // Find the quiz to get the week number
+    const quizToReset = onlineQuizzes.find(
+      qz => qz.quiz_id === quiz_id
+    );
+    
     // Remove the quiz from the array
     const updatedQuizzes = onlineQuizzes.filter(
       qz => qz.quiz_id !== quiz_id
     );
 
+    // Update weeks array if quiz was found and has a week number
+    const weeks = student.weeks || [];
+    let updatedWeeks = weeks;
+    
+    if (quizToReset && quizToReset.week !== undefined && quizToReset.week !== null) {
+      updatedWeeks = weeks.map(weekData => {
+        if (weekData.week === quizToReset.week) {
+          return {
+            ...weekData,
+            quizDegree: null
+          };
+        }
+        return weekData;
+      });
+    }
+
     // Update student document
     const updateResult = await db.collection('students').updateOne(
       { id: student_id },
-      { $set: { online_quizzes: updatedQuizzes } }
+      { $set: { 
+        online_quizzes: updatedQuizzes,
+        weeks: updatedWeeks
+      } }
     );
 
     if (updateResult.matchedCount === 0) {

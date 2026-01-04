@@ -57,8 +57,10 @@ export default function VerificationAccountsCodes() {
   const pageSize = 100;
   const [showPagePopup, setShowPagePopup] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAddPopup, setShowAddPopup] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [selectedVacForDelete, setSelectedVacForDelete] = useState(null);
   const [regenerateError, setRegenerateError] = useState('');
   const [regenerateSuccess, setRegenerateSuccess] = useState('');
   const [generateType, setGenerateType] = useState('single'); // 'single' or 'many'
@@ -184,6 +186,28 @@ export default function VerificationAccountsCodes() {
       setRegenerateError(error.response?.data?.error || error.message || 'Error regenerating VAC');
       setRegenerateSuccess('');
       // Auto-hide error message after 6 seconds
+      setTimeout(() => setRegenerateError(''), 6000);
+    },
+  });
+
+  // Delete VAC mutation
+  const deleteVACMutation = useMutation({
+    mutationFn: async (account_id) => {
+      const response = await apiClient.delete(`/api/vac?account_id=${account_id}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['vac']);
+      refetch();
+      setShowDeleteModal(false);
+      setSelectedVacForDelete(null);
+      setRegenerateSuccess('VAC deleted successfully!');
+      setRegenerateError('');
+      setTimeout(() => setRegenerateSuccess(''), 6000);
+    },
+    onError: (error) => {
+      setRegenerateError(error.response?.data?.error || error.message || 'Error deleting VAC');
+      setRegenerateSuccess('');
       setTimeout(() => setRegenerateError(''), 6000);
     },
   });
@@ -341,6 +365,21 @@ export default function VerificationAccountsCodes() {
     }
   };
 
+  // Handle delete VAC
+  const handleDeleteVAC = (vac) => {
+    setSelectedVacForDelete(vac);
+    setShowDeleteModal(true);
+    setRegenerateError('');
+    setRegenerateSuccess('');
+  };
+
+  // Handle confirm delete
+  const handleConfirmDelete = () => {
+    if (selectedVacForDelete) {
+      deleteVACMutation.mutate(selectedVacForDelete.account_id);
+    }
+  };
+
   // Handle WhatsApp send
   const handleSendWhatsApp = (vac) => {
     if (!vac.phone) {
@@ -478,6 +517,7 @@ Best regards
                     <Table.Th style={{ width: '15%', textAlign: 'center' }}>VAC State</Table.Th>
                     <Table.Th style={{ width: '20%', textAlign: 'center' }}>Regenerate VAC</Table.Th>
                     <Table.Th style={{ width: '20%', textAlign: 'center' }}>Send To Student</Table.Th>
+                    <Table.Th style={{ width: '10%', textAlign: 'center' }}>Delete</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -561,6 +601,40 @@ Best regards
                         ) : (
                           <span style={{ color: '#6c757d', fontStyle: 'italic', fontSize: '0.85rem' }}>No phone</span>
                         )}
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: 'center' }}>
+                        <button
+                          className="delete-vac-btn"
+                          onClick={() => handleDeleteVAC(vac)}
+                          disabled={deleteVACMutation.isLoading}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: deleteVACMutation.isLoading ? 'not-allowed' : 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            transition: 'all 0.2s ease',
+                            opacity: deleteVACMutation.isLoading ? 0.6 : 1,
+                            whiteSpace: 'nowrap'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!deleteVACMutation.isLoading) {
+                              e.target.style.backgroundColor = '#c82333';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!deleteVACMutation.isLoading) {
+                              e.target.style.backgroundColor = '#dc3545';
+                              e.target.style.transform = 'translateY(0)';
+                            }
+                          }}
+                        >
+                          🗑️ Delete
+                        </button>
                       </Table.Td>
                     </Table.Tr>
                   ))}
@@ -910,6 +984,37 @@ Best regards
                     setRegenerateSuccess('');
                   }}
                   disabled={regenerateMutation.isLoading}
+                  className="cancel-btn"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && selectedVacForDelete && (
+          <div className="confirm-modal">
+            <div className="confirm-content">
+              <h3>Confirm Delete VAC</h3>
+              <p>Are you sure you want to delete VAC code <strong>{selectedVacForDelete.VAC}</strong> for ID <strong>{selectedVacForDelete.account_id}</strong>?</p>
+              <div className="confirm-buttons">
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleteVACMutation.isLoading}
+                  className="confirm-regenerate-btn"
+                >
+                  {deleteVACMutation.isLoading ? "Deleting..." : "Yes, Delete VAC"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setSelectedVacForDelete(null);
+                    setRegenerateError('');
+                    setRegenerateSuccess('');
+                  }}
+                  disabled={deleteVACMutation.isLoading}
                   className="cancel-btn"
                 >
                   Cancel

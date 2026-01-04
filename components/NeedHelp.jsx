@@ -12,7 +12,7 @@ export default function NeedHelp({ style = {}, className = "" }) {
           fontSize: '0.9rem',
           color: '#6c757d',
           textAlign: 'center',
-          marginBottom: '-15px',
+          marginBottom: '-10px',
           ...style
         }}
       >

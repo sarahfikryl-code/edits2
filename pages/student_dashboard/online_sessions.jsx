@@ -552,24 +552,24 @@ export default function OnlineSessions() {
               className="vvc-popup"
               style={{
                 backgroundColor: 'white',
-                borderRadius: '12px',
-                padding: '24px',
-                maxWidth: '500px',
+                borderRadius: '16px',
+                padding: '32px',
+                maxWidth: '700px',
                 width: '100%',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 style={{ marginTop: 0, marginBottom: '20px', color: '#333' }}>
+              <h2 style={{ marginTop: 0, marginBottom: '24px', color: '#333', fontSize: '1.5rem', fontWeight: '600', textAlign: 'center' }}>
                 Enter Verification Code
               </h2>
 
               <form onSubmit={handleVVCSubmit}>
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#333', fontWeight: '500' }}>
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ display: 'block', marginBottom: '16px', color: '#333', fontWeight: '600', fontSize: '1.1rem', textAlign: 'center' }}>
                     Video Verification Code (VVC) <span style={{ color: 'red' }}>*</span>
                   </label>
-                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '12px', flexWrap: 'nowrap', alignItems: 'center' }}>
                     {vvc.map((char, index) => (
                       <input
                         key={index}
@@ -581,13 +581,31 @@ export default function OnlineSessions() {
                         onKeyDown={(e) => handleVVCKeyDown(e, index)}
                         onPaste={(e) => handleVVCPaste(e, index)}
                         style={{
-                          width: '40px',
-                          height: '50px',
+                          width: '45px',
+                          height: '55px',
                           textAlign: 'center',
                           fontSize: '1.5rem',
-                          fontWeight: '600',
-                          border: vvcError ? '2px solid #dc3545' : '2px solid #ddd',
-                          borderRadius: '6px'
+                          fontWeight: '700',
+                          border: vvcError ? '2px solid #dc3545' : '2px solid #87CEEB',
+                          borderRadius: '8px',
+                          backgroundColor: '#f8f9fa',
+                          color: '#333',
+                          transition: 'all 0.3s ease',
+                          boxShadow: vvcError ? '0 0 0 2px rgba(220, 53, 69, 0.1)' : '0 2px 6px rgba(135, 206, 235, 0.2)',
+                          outline: 'none',
+                          flexShrink: 0
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = '#1FA8DC';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(31, 168, 220, 0.2)';
+                          e.target.style.backgroundColor = '#ffffff';
+                          e.target.style.transform = 'scale(1.05)';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = vvcError ? '#dc3545' : '#87CEEB';
+                          e.target.style.boxShadow = vvcError ? '0 0 0 2px rgba(220, 53, 69, 0.1)' : '0 2px 6px rgba(135, 206, 235, 0.2)';
+                          e.target.style.backgroundColor = '#f8f9fa';
+                          e.target.style.transform = 'scale(1)';
                         }}
                         required
                       />
@@ -787,9 +805,14 @@ export default function OnlineSessions() {
             }
             
             .vvc-popup input {
-              width: 35px !important;
-              height: 45px !important;
-              font-size: 1.3rem !important;
+              width: 40px !important;
+              height: 50px !important;
+              font-size: 1.4rem !important;
+            }
+            
+            .vvc-popup > form > div:nth-child(2) > div {
+              flex-wrap: nowrap !important;
+              gap: 6px !important;
             }
             
             .video-popup-overlay {
@@ -845,9 +868,14 @@ export default function OnlineSessions() {
             }
             
             .vvc-popup input {
-              width: 30px !important;
-              height: 40px !important;
-              font-size: 1.1rem !important;
+              width: 38px !important;
+              height: 48px !important;
+              font-size: 1.3rem !important;
+            }
+            
+            .vvc-popup > form > div:nth-child(2) > div {
+              flex-wrap: nowrap !important;
+              gap: 5px !important;
             }
             
             .vvc-popup button {
@@ -879,13 +907,17 @@ export default function OnlineSessions() {
           
           @media (max-width: 360px) {
             .vvc-popup input {
-              width: 28px !important;
-              height: 38px !important;
-              font-size: 1rem !important;
+              width: 32px !important;
+              height: 42px !important;
+              font-size: 1.2rem !important;
+            }
+            
+            .vvc-popup > form > div:nth-child(2) > div {
+              gap: 4px !important;
             }
             
             .vvc-popup h2 {
-              font-size: 1rem !important;
+              font-size: 1.1rem !important;
             }
           }
         `}</style>

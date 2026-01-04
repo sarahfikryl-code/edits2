@@ -107,12 +107,12 @@ export default async function handler(req, res) {
         message_state: false
       };
       
-      const result = await db.collection('students').updateOne(
-        { id: student_id },
+    const result = await db.collection('students').updateOne(
+      { id: student_id },
         { $push: { weeks: newWeek } }
-      );
-      
-      if (result.matchedCount === 0) return res.status(404).json({ error: 'Student not found' });
+    );
+    
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Student not found' });
     }
     
     res.json({ success: true });

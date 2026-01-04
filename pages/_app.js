@@ -22,9 +22,11 @@ function DevToolsProtection({ userRole }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [timer, setTimer] = useState(15);
 
-  // Check if on login page
+  // Check if on login page or sign-up page
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const isLoginPage = currentPath === '/';
+  const isSignUpPage = currentPath === '/sign-up';
+  const isPublicPage = isLoginPage || isSignUpPage;
 
   // Check if user is developer
   const isDeveloper = userRole === 'developer';
@@ -211,18 +213,20 @@ function DevToolsProtection({ userRole }) {
       return;
     }
 
-    // Check if on login page
+    // Check if on login page or sign-up page
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
     const isLoginPage = currentPath === '/';
+    const isSignUpPage = currentPath === '/sign-up';
+    const isPublicPage = isLoginPage || isSignUpPage;
     
-    // On login page, show message but don't redirect
-    if (isLoginPage && devToolsDetected) {
+    // On login page or sign-up page, show message but don't redirect
+    if (isPublicPage && devToolsDetected) {
       // Just show the message, no timer or redirect
       return;
     }
     
-    // For non-login pages, set up timer and redirect
-    if (devToolsDetected && !isLoggingOut && !isLoginPage) {
+    // For non-public pages, set up timer and redirect
+    if (devToolsDetected && !isLoggingOut && !isPublicPage) {
       let redirectTimeout;
       let timerInterval;
       
@@ -395,7 +399,7 @@ function DevToolsProtection({ userRole }) {
               lineHeight: '1.5'
             }}
           >
-            {isLoginPage ? (
+            {isPublicPage ? (
               <>Developer tools detected. Please close them to continue.</>
             ) : (
               <>

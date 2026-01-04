@@ -34,22 +34,19 @@ const MONGO_URI = envConfig.MONGO_URI || process.env.MONGO_URI || 'mongodb://loc
 const DB_NAME = envConfig.DB_NAME || process.env.DB_NAME || 'mr-george-magdy';
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'GET') {
+    let client;
+    try {
+      // Verify authentication
+      const user = await authMiddleware(req);
+      
+      // Check if user has required role (admin, developer, or assistant)
+      if (!['admin', 'developer', 'assistant'].includes(user.role)) {
+        return res.status(403).json({ error: 'Forbidden: Access denied' });
+      }
 
-  let client;
-  try {
-    // Verify authentication
-    const user = await authMiddleware(req);
-    
-    // Check if user has required role (admin, developer, or assistant)
-    if (!['admin', 'developer', 'assistant'].includes(user.role)) {
-      return res.status(403).json({ error: 'Forbidden: Access denied' });
-    }
-
-    client = await MongoClient.connect(MONGO_URI);
-    const db = client.db(DB_NAME);
+      client = await MongoClient.connect(MONGO_URI);
+      const db = client.db(DB_NAME);
 
     // Check if pagination parameters are provided
     const { page, limit, search, sortBy, sortOrder } = req.query;
@@ -155,14 +152,59 @@ export default async function handler(req, res) {
       });
     }
 
-    // Non-paginated response (for backward compatibility)
-    const vacRecords = await db.collection('VAC').find({}).toArray();
-    return res.status(200).json({ data: vacRecords });
-  } catch (error) {
-    console.error('VAC API error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    if (client) await client.close();
+      // Non-paginated response (for backward compatibility)
+      const vacRecords = await db.collection('VAC').find({}).toArray();
+      return res.status(200).json({ data: vacRecords });
+    } catch (error) {
+      console.error('VAC API error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      if (client) await client.close();
+    }
+  } else if (req.method === 'DELETE') {
+    // Delete VAC
+    let client;
+    try {
+      // Verify authentication
+      const user = await authMiddleware(req);
+      
+      // Check if user has required role (admin, developer, or assistant)
+      if (!['admin', 'developer', 'assistant'].includes(user.role)) {
+        return res.status(403).json({ error: 'Forbidden: Access denied' });
+      }
+
+      const { account_id } = req.query;
+
+      if (!account_id) {
+        return res.status(400).json({ error: 'account_id is required' });
+      }
+
+      const accountIdNum = parseInt(account_id);
+      if (isNaN(accountIdNum)) {
+        return res.status(400).json({ error: 'Invalid account_id' });
+      }
+
+      client = await MongoClient.connect(MONGO_URI);
+      const db = client.db(DB_NAME);
+
+      const result = await db.collection('VAC').deleteOne({ account_id: accountIdNum });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ error: 'VAC record not found' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'VAC deleted successfully'
+      });
+    } catch (error) {
+      console.error('VAC API error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      if (client) await client.close();
+    }
+  } else {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 }
 

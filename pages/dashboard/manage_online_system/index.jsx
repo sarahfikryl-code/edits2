@@ -127,8 +127,7 @@ export default function ManageOnlineSystem() {
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto',
-      minHeight: '100vh',
-      marginBottom: '-30px'
+      paddingBottom: '20px'
     }}>
       <div className="main-container" style={{ maxWidth: 600, margin: "10px auto", textAlign: "center", width: '100%' }}>
         <Title>Manage Online System</Title>
@@ -240,7 +239,7 @@ export default function ManageOnlineSystem() {
           }
         `}</style>
         
-        <div style={{ marginTop: 30 }}>
+        <div style={{ marginTop: 30, marginBottom: 20 }}>
           <button
             className="dashboard-btn"
             onClick={() => router.push("/dashboard/manage_online_system/online_sessions")}

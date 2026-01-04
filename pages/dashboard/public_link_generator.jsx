@@ -35,13 +35,13 @@ export default function GenerateLink() {
     if (isFullPhone) {
       if (allStudents) {
         const matchingStudents = allStudents.filter(s =>
-          s.phone === searchTerm || s.parentsPhone === searchTerm || s.parents_phone === searchTerm
+          s.phone === searchTerm || s.parentsPhone1 === searchTerm || s.parentsPhone === searchTerm
         );
         if (matchingStudents.length === 1) {
           const student = matchingStudents[0];
           const link = generatePublicStudentLink(student.id.toString());
           setGeneratedLink(link);
-          setStudentId(student.id.toString());
+          setStudentId(student.id.toString()); // Auto-replace with ID
           setSelectedStudent(student);
         } else {
           setError(`No student found with phone number ${searchTerm}`);
@@ -54,6 +54,7 @@ export default function GenerateLink() {
     
     // Pure digits, treat as possible ID or partial phone
     if (isAllDigits) {
+      // Try exact ID match in local list first
       if (allStudents) {
         const byId = allStudents.find(s => String(s.id) === searchTerm);
         if (byId) {
@@ -62,6 +63,7 @@ export default function GenerateLink() {
           setSelectedStudent(byId);
           return;
         }
+        // Partial phone/parent phone startsWith match
         const term = searchTerm;
         const matchingStudents = allStudents.filter(s => {
           const phone = String(s.phone || '').replace(/[^0-9]/g, '');
@@ -83,26 +85,29 @@ export default function GenerateLink() {
           return;
         }
       }
+      // Fallback: just use numeric as id
       const link = generatePublicStudentLink(searchTerm);
       setGeneratedLink(link);
-      setSelectedStudent(null);
-      setShowWarning(true);
+      setSelectedStudent(null); // No student data available for fallback
+      setShowWarning(true); // Show warning for non-existent student
       return;
     }
     
-    // Name search
+    // Name search through all students
     if (allStudents) {
       const matchingStudents = allStudents.filter(student => 
         student.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
       
       if (matchingStudents.length === 1) {
+        // Single match, use it directly
         const foundStudent = matchingStudents[0];
         const link = generatePublicStudentLink(foundStudent.id.toString());
         setGeneratedLink(link);
         setStudentId(foundStudent.id.toString());
         setSelectedStudent(foundStudent);
       } else if (matchingStudents.length > 1) {
+        // Multiple matches, show selection
         setSearchResults(matchingStudents);
         setShowSearchResults(true);
         setError(`Found ${matchingStudents.length} students. Please select one.`);
@@ -116,10 +121,12 @@ export default function GenerateLink() {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedLink);
-    setSuccessMessage('Public link copied to clipboard');
+    setSuccessMessage('Public link copied in the clipboard');
+    // Clear success message after 3 seconds
     setTimeout(() => setSuccessMessage(''), 3000);
   };
 
+  // Handle student selection from search results
   const handleStudentSelect = (student) => {
     const link = generatePublicStudentLink(student.id.toString());
     setGeneratedLink(link);
@@ -130,6 +137,7 @@ export default function GenerateLink() {
     setError("");
   };
 
+  // Clear student data when ID input is emptied
   const handleIdChange = (e) => {
     const value = e.target.value;
     setStudentId(value);
@@ -145,9 +153,17 @@ export default function GenerateLink() {
   };
 
   return (
-    <div style={{ padding: "20px 5px 20px 5px" }}>
+    <div style={{ 
+      padding: "20px 5px 20px 5px"
+    }}>
       <div style={{ maxWidth: 600, margin: "40px auto", padding: 24 }}>
         <style jsx>{`
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+          }
           .fetch-form {
             display: flex;
             gap: 12px;
@@ -167,6 +183,7 @@ export default function GenerateLink() {
           .fetch-input:focus {
             outline: none;
             border-color: #87CEEB;
+            background: white;
             box-shadow: 0 0 0 3px rgba(135, 206, 235, 0.1);
           }
           .fetch-btn {
@@ -189,25 +206,39 @@ export default function GenerateLink() {
           .fetch-btn:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 25px rgba(31, 168, 220, 0.4);
+            background: linear-gradient(135deg, #0d8bc7 0%, #5bb8e6 100%);
+          }
+          .fetch-btn:active {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(31, 168, 220, 0.3);
           }
           .form-container {
             background: white;
             border-radius: 16px;
             padding: 32px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
           }
           .link-container {
-            background: rgb(255, 255, 255);
+            background:rgb(255, 255, 255);
             border-radius: 20px;
             padding: 28px;
             box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+            border: 3px solid rgba(255, 255, 255, 0.2);
             margin-top: 24px;
+            position: static;
+            transform: translateZ(0);
+            will-change: auto;
           }
           .link-title {
-            color: rgb(94, 91, 91);
+            color:rgb(94, 91, 91);
             font-size: 1.4rem;
             font-weight: 800;
             margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
           }
           .link-display {
             background: #ffffff;
@@ -218,8 +249,11 @@ export default function GenerateLink() {
             word-break: break-all;
             font-size: 15px;
             font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
+            font-weight: 500;
             margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             color: #2d3748;
+            line-height: 1.6;
           }
           .copy-btn {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
@@ -239,6 +273,11 @@ export default function GenerateLink() {
           .copy-btn:hover {
             transform: translateY(-3px);
             box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5);
+            background: linear-gradient(135deg, #ff5252 0%, #e53935 100%);
+          }
+          .copy-btn:active {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
           }
           .success-message {
             background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
@@ -248,13 +287,112 @@ export default function GenerateLink() {
             margin-top: 16px;
             text-align: center;
             font-weight: 600;
+            box-shadow: 0 4px 16px rgba(40, 167, 69, 0.3);
           }
           @media (max-width: 768px) {
             .fetch-form {
               flex-direction: column;
+              gap: 12px;
             }
             .fetch-btn {
               width: 100%;
+              padding: 14px 20px;
+              font-size: 0.95rem;
+            }
+            .fetch-input {
+              width: 100%;
+            }
+            .form-container {
+              padding: 24px;
+            }
+            .link-container {
+              padding: 20px;
+              margin-top: 16px;
+            }
+            .link-title {
+              font-size: 1.2rem;
+              margin-bottom: 16px;
+            }
+            .link-display {
+              padding: 16px;
+              font-size: 14px;
+              word-break: break-all;
+            }
+            .copy-btn {
+              width: 100%;
+              padding: 12px 20px;
+              font-size: 0.9rem;
+              justify-content: center;
+              text-align: center;
+            }
+            .success-message {
+              padding: 12px;
+              font-size: 0.9rem;
+            }
+          }
+          
+          @media (max-width: 480px) {
+            .form-container {
+              padding: 16px;
+              margin: 20px auto;
+            }
+            .link-container {
+              padding: 16px;
+            }
+            .link-title {
+              font-size: 1.1rem;
+              margin-bottom: 12px;
+            }
+            .link-display {
+              padding: 12px;
+              font-size: 13px;
+            }
+            .copy-btn {
+              padding: 10px 16px;
+              font-size: 0.85rem;
+            }
+            .fetch-input {
+              padding: 12px 14px;
+              font-size: 0.95rem;
+            }
+            .fetch-btn {
+              padding: 12px 16px;
+              font-size: 0.9rem;
+            }
+            /* Student info cards responsive */
+            .student-info-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
+            }
+            .student-info-card {
+              padding: 12px !important;
+            }
+            .student-info-label {
+              font-size: 0.75rem !important;
+            }
+            .student-info-value {
+              font-size: 1rem !important;
+            }
+            /* WhatsApp table responsive */
+            .whatsapp-table {
+              font-size: 0.85rem;
+              margin: 0 auto;
+              display: table;
+            }
+            .whatsapp-table th {
+              padding: 8px 4px !important;
+              font-size: 0.8rem !important;
+              text-align: center !important;
+            }
+            .whatsapp-table td {
+              padding: 12px 4px !important;
+              text-align: center !important;
+            }
+            .whatsapp-btn {
+              padding: 8px 12px !important;
+              font-size: 12px !important;
+              justify-content: center !important;
+              text-align: center !important;
             }
           }
         `}</style>
@@ -276,6 +414,7 @@ export default function GenerateLink() {
             </button>
           </form>
           
+          {/* Show search results if multiple matches found */}
           {showSearchResults && searchResults.length > 0 && (
             <div style={{ 
               marginTop: "16px", 
@@ -284,7 +423,11 @@ export default function GenerateLink() {
               borderRadius: "8px", 
               border: "1px solid #dee2e6" 
             }}>
-              <div style={{ marginBottom: "12px", fontWeight: "600", color: "#495057" }}>
+              <div style={{ 
+                marginBottom: "12px", 
+                fontWeight: "600", 
+                color: "#495057" 
+              }}>
                 Select a student:
               </div>
               {searchResults.map((student) => (
@@ -342,67 +485,112 @@ export default function GenerateLink() {
           </div>
         )}
 
+        {/* Student Information Display */}
         {selectedStudent && (
           <div style={{
             background: "white",
             borderRadius: "16px",
             padding: "24px",
             marginTop: "24px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.1)"
+            boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)"
           }}>
-            <div style={{
+            <div className="student-info-grid" style={{
               display: "grid",
               gridTemplateColumns: "repeat(2, 1fr)",
               gap: "16px"
             }}>
-              <div style={{
+              {/* Student Name */}
+              <div className="student-info-card" style={{
                 background: "white",
                 border: "1px solid #e9ecef",
                 borderRadius: "12px",
                 padding: "16px",
-                borderLeft: "4px solid #1FA8DC"
+                borderLeft: "4px solid #1FA8DC",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
               }}>
-                <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "#6c757d", marginBottom: "8px" }}>
+                <div className="student-info-label" style={{
+                  fontSize: "0.8rem",
+                  fontWeight: "600",
+                  color: "#6c757d",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  marginBottom: "8px"
+                }}>
                   STUDENT NAME
                 </div>
-                <div style={{ fontSize: "1.1rem", fontWeight: "700", color: "#2d3748" }}>
+                <div className="student-info-value" style={{
+                  fontSize: "1.1rem",
+                  fontWeight: "700",
+                  color: "#2d3748"
+                }}>
                   {selectedStudent.name || 'N/A'}
                 </div>
               </div>
 
-              <div style={{
+              {/* Student Phone */}
+              <div className="student-info-card" style={{
                 background: "white",
                 border: "1px solid #e9ecef",
                 borderRadius: "12px",
                 padding: "16px",
-                borderLeft: "4px solid #1FA8DC"
+                borderLeft: "4px solid #1FA8DC",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
               }}>
-                <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "#6c757d", marginBottom: "8px" }}>
+                <div className="student-info-label" style={{
+                  fontSize: "0.8rem",
+                  fontWeight: "600",
+                  color: "#6c757d",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  marginBottom: "8px"
+                }}>
                   STUDENT PHONE
                 </div>
-                <div style={{ fontSize: "1.1rem", fontWeight: "700", color: "#2d3748", fontFamily: "monospace" }}>
+                <div className="student-info-value" style={{
+                  fontSize: "1.1rem",
+                  fontWeight: "700",
+                  color: "#2d3748",
+                  fontFamily: "monospace"
+                }}>
                   {selectedStudent.phone || 'N/A'}
                 </div>
               </div>
 
-              <div style={{
+              {/* Parent Phone 1 */}
+              <div className="student-info-card" style={{
                 background: "white",
                 border: "1px solid #e9ecef",
                 borderRadius: "12px",
                 padding: "16px",
-                borderLeft: "4px solid #1FA8DC"
+                borderLeft: "4px solid #1FA8DC",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)"
               }}>
-                <div style={{ fontSize: "0.8rem", fontWeight: "600", color: "#6c757d", marginBottom: "8px" }}>
+                <div className="student-info-label" style={{
+                  fontSize: "0.8rem",
+                  fontWeight: "600",
+                  color: "#6c757d",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  marginBottom: "8px"
+                }}>
                   PARENT'S PHONE
                 </div>
-                <div style={{ fontSize: "1.1rem", fontWeight: "700", color: "#2d3748", fontFamily: "monospace" }}>
-                  {selectedStudent.parents_phone || selectedStudent.parentsPhone || 'N/A'}
+                <div className="student-info-value" style={{
+                  fontSize: "1.1rem",
+                  fontWeight: "700",
+                  color: "#2d3748",
+                  fontFamily: "monospace"
+                }}>
+                  {selectedStudent.parents_phone || selectedStudent.parentsPhone || selectedStudent.parentsPhone1 || 'N/A'}
                 </div>
               </div>
+
             </div>
           </div>
         )}
 
+        {/* Warning for non-existent student */}
         {showWarning && generatedLink && (
           <div style={{
             background: "linear-gradient(135deg, #ffc107 0%, #ff8c00 100%)",
@@ -411,25 +599,30 @@ export default function GenerateLink() {
             padding: "16px",
             marginTop: "16px",
             textAlign: "center",
-            fontWeight: "600"
+            fontWeight: "600",
+            boxShadow: "0 4px 16px rgba(255, 193, 7, 0.3)",
+            border: "1px solid rgba(255, 193, 7, 0.2)"
           }}>
-            ⚠️ Warning: This student does not exist. It might have been deleted. This link will not work.
+            ⚠️ Warning, This student does not exist. It might have been deleted. This link will not work.
           </div>
         )}
 
-        {generatedLink && (
+      {generatedLink && (
           <>
             <div className="link-container">
               <div className="link-title">
                 🔗 Generated Public Link:
               </div>
               <div className="link-display">
-                <strong>{generatedLink}</strong>
-              </div>
-              <button onClick={copyToClipboard} className="copy-btn">
+            <strong>{generatedLink}</strong>
+          </div>
+          <button
+            onClick={copyToClipboard}
+                className="copy-btn"
+              >
                 📋 Copy Link
-              </button>
-            </div>
+          </button>
+        </div>
             {successMessage && (
               <div className="success-message">
                 ✅ {successMessage}
@@ -438,13 +631,15 @@ export default function GenerateLink() {
           </>
         )}
 
+        {/* WhatsApp Buttons Table - Show when link is generated and student exists */}
         {generatedLink && selectedStudent && (
           <div style={{
             marginTop: "24px",
             background: "white",
             borderRadius: "16px",
             padding: "24px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.1)"
+            boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
+            border: "1px solid rgba(255,255,255,0.2)"
           }}>
             <div style={{
               fontSize: "1.3rem",
@@ -456,12 +651,18 @@ export default function GenerateLink() {
               📱 Send via WhatsApp
             </div>
             
-            <table style={{
-              width: "100%",
-              maxWidth: "600px",
-              margin: "0 auto",
-              borderCollapse: "collapse"
+            <div style={{
+              display: "flex",
+              justifyContent: "center",
+              width: "100%"
             }}>
+              <table className="whatsapp-table" style={{
+                width: "100%",
+                maxWidth: "600px",
+                borderCollapse: "collapse",
+                borderSpacing: "0",
+                margin: "0 auto"
+              }}>
               <thead>
                 <tr>
                   <th style={{
@@ -484,7 +685,7 @@ export default function GenerateLink() {
                     borderBottom: "2px solid #1FA8DC",
                     backgroundColor: "#f8f9fa"
                   }}>
-                    Send to Parent
+                    Send to Parent 1
                   </th>
                 </tr>
               </thead>
@@ -498,10 +699,11 @@ export default function GenerateLink() {
                   }}>
                     {selectedStudent.phone ? (
                       <button
+                        className="whatsapp-btn"
                         onClick={() => {
                           const phoneNumber = selectedStudent.phone.replace(/[^0-9]/g, '');
                           const formattedPhone = phoneNumber.startsWith('01') ? '20' + phoneNumber.substring(1) : phoneNumber;
-                          const message = `Tony Joseph Demo attendance system:
+                          const message = `Ahmed Badr's Quality Team: 
 
 Dear ${selectedStudent.name?.split(' ')[0] || 'Student'},
 If you want to keep track of your attendance, homework, and quizzes results.
@@ -509,9 +711,9 @@ Just click the link below to stay updated:
 
 🖇️ ${generatedLink}
 
-We are always happy to stay in touch 😊❤
+We wish you gets high scores 😊❤
 
-– Tony Joseph Demo attendance system`;
+– Mr. Ahmed Badr`;
                           const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
                           window.open(whatsappUrl, '_blank');
                         }}
@@ -527,6 +729,7 @@ We are always happy to stay in touch 😊❤
                           alignItems: 'center',
                           gap: '8px',
                           fontWeight: '600',
+                          transition: 'background-color 0.2s',
                           width: '100%',
                           justifyContent: 'center',
                           margin: '0 auto'
@@ -540,7 +743,11 @@ We are always happy to stay in touch 😊❤
                         WhatsApp
                       </button>
                     ) : (
-                      <div style={{ color: "#6c757d", fontSize: "0.9rem", fontStyle: "italic" }}>
+                      <div style={{
+                        color: "#6c757d",
+                        fontSize: "0.9rem",
+                        fontStyle: "italic"
+                      }}>
                         No phone number
                       </div>
                     )}
@@ -551,21 +758,22 @@ We are always happy to stay in touch 😊❤
                     verticalAlign: "middle",
                     borderBottom: "1px solid #e9ecef"
                   }}>
-                    {(selectedStudent.parents_phone || selectedStudent.parentsPhone) ? (
+                    {(selectedStudent.parents_phone || selectedStudent.parentsPhone || selectedStudent.parentsPhone1) ? (
                       <button
+                        className="whatsapp-btn"
                         onClick={() => {
-                          const phoneNumber = (selectedStudent.parents_phone || selectedStudent.parentsPhone).replace(/[^0-9]/g, '');
+                          const phoneNumber = (selectedStudent.parents_phone || selectedStudent.parentsPhone || selectedStudent.parentsPhone1).replace(/[^0-9]/g, '');
                           const formattedPhone = phoneNumber.startsWith('01') ? '20' + phoneNumber.substring(1) : phoneNumber;
-                          const message = `Tony Joseph Demo attendance system:
+                          const message = `Ahmed Badr's Quality Team: 
 
 Dear ${selectedStudent.name?.split(' ')[0] || 'Student'}'s Parent,
 If you'd like to track ${selectedStudent.name?.split(' ')[0] || 'Student'}'s attendance, homework, and quizzes, please visit the link below:
 
 🖇️ ${generatedLink}
 
-We are always happy to stay in touch 😊❤
+We wish ${selectedStudent.name?.split(' ')[0] || 'Student'} gets high scores 😊❤
 
-– Tony Joseph Demo attendance system`;
+– Mr. Ahmed Badr`;
                           const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
                           window.open(whatsappUrl, '_blank');
                         }}
@@ -581,6 +789,7 @@ We are always happy to stay in touch 😊❤
                           alignItems: 'center',
                           gap: '8px',
                           fontWeight: '600',
+                          transition: 'background-color 0.2s',
                           width: '100%',
                           justifyContent: 'center',
                           margin: '0 auto'
@@ -594,17 +803,23 @@ We are always happy to stay in touch 😊❤
                         WhatsApp
                       </button>
                     ) : (
-                      <div style={{ color: "#6c757d", fontSize: "0.9rem", fontStyle: "italic" }}>
+                      <div style={{
+                        color: "#6c757d",
+                        fontSize: "0.9rem",
+                        fontStyle: "italic"
+                      }}>
                         No phone number
                       </div>
                     )}
                   </td>
                 </tr>
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 }
+

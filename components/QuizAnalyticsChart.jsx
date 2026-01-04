@@ -128,7 +128,7 @@ export default function QuizAnalyticsChart({ analyticsData }) {
                 return [
                   <div key="tooltip" style={{ color: '#000000' }}>
                     <div><strong style={{ color: '#000000' }}>Category:</strong> {barName}</div>
-                    <div><strong style={{ color: '#000000' }}>Students:</strong> {count}</div>
+                    <div><strong style={{ color: '#000000' }}>Students No. :</strong> {count}</div>
                     <div><strong style={{ color: '#000000' }}>Percentage:</strong> {percentage}%</div>
                     {idsDisplay && (
                       <div><strong style={{ color: '#000000' }}>{idsDisplay}</strong></div>

@@ -23,8 +23,8 @@ export default function StudentDashboard() {
   const isLoading = profileLoading || studentLoading;
 
   return (
-    <div style={{ 
-      padding: "35px",
+    <div className="student-dashboard-wrapper" style={{ 
+      padding: "35px 35px 20px 35px",
       display: 'flex',
       flexDirection: 'column',
       overflow: 'auto'
@@ -101,10 +101,19 @@ export default function StudentDashboard() {
             h1 {
               font-size: 1.5rem !important;
             }
+            .student-dashboard-wrapper {
+              padding: 15px 15px 10px 15px !important;
+            }
+          }
+          
+          @media (max-width: 768px) {
+            .student-dashboard-wrapper {
+              padding: 20px 20px 15px 20px !important;
+            }
           }
         `}</style>
         
-        <div style={{ marginTop: 30 }}>
+        <div style={{ marginTop: 30, marginBottom: 20 }}>
           {isLoading ? (
             <div style={{
               minHeight: "50vh",

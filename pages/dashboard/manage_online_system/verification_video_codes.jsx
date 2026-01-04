@@ -543,7 +543,7 @@ export default function VerificationVideoCodes() {
                     <Table.Th style={{ width: '12%', textAlign: 'center' }}>VVC</Table.Th>
                     <Table.Th style={{ width: '10%', textAlign: 'center' }}>Number of Views</Table.Th>
                     <Table.Th style={{ width: '8%', textAlign: 'center' }}>Viewed</Table.Th>
-                    <Table.Th style={{ width: '12%', textAlign: 'center' }}>Viewed By Who</Table.Th>
+                    <Table.Th style={{ width: '12%', textAlign: 'center' }}>Viewed By Who (ID)</Table.Th>
                     <Table.Th style={{ width: '12%', textAlign: 'center' }}>Code State</Table.Th>
                     <Table.Th style={{ width: '12%', textAlign: 'center' }}>Payment State</Table.Th>
                     <Table.Th style={{ width: '12%', textAlign: 'center' }}>Made By Who</Table.Th>
