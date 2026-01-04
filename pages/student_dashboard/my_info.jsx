@@ -525,7 +525,7 @@ export default function MyInfo() {
                         cursor: 'pointer',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                         transition: 'all 0.2s ease',
-                        zIndex: 10
+                        zIndex: 9
                       }}
                       onMouseEnter={(e) => {
                         e.target.style.transform = 'scale(1.1)';

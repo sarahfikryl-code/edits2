@@ -221,7 +221,7 @@ export default function PreviewStudentHomeworks() {
 
   return (
     <div className="page-wrapper" style={{ padding: "20px 5px 20px 5px" }}>
-      <div className="main-container" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
+      <div className="main-container" style={{ maxWidth: 800, margin: "40px auto", padding: "25px" }}>
         <style jsx>{`
           @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -403,7 +403,6 @@ export default function PreviewStudentHomeworks() {
             }
             .form-container, .homeworks-container, .info-container {
               padding: 20px;
-              border-radius: 12px;
             }
             .info-container {
               padding: 16px !important;
@@ -440,7 +439,6 @@ export default function PreviewStudentHomeworks() {
             }
             .form-container, .homeworks-container, .info-container {
               padding: 16px;
-              border-radius: 10px;
             }
             .info-container {
               padding: 12px !important;

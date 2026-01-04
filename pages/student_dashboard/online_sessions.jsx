@@ -805,7 +805,7 @@ export default function OnlineSessions() {
             }
             
             .vvc-popup input {
-              width: 40px !important;
+              width: 35px !important;
               height: 50px !important;
               font-size: 1.4rem !important;
             }
@@ -868,7 +868,7 @@ export default function OnlineSessions() {
             }
             
             .vvc-popup input {
-              width: 38px !important;
+              width: 35px !important;
               height: 48px !important;
               font-size: 1.3rem !important;
             }
@@ -907,7 +907,7 @@ export default function OnlineSessions() {
           
           @media (max-width: 360px) {
             .vvc-popup input {
-              width: 32px !important;
+              width: 35px !important;
               height: 42px !important;
               font-size: 1.2rem !important;
             }

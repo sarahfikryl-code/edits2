@@ -770,7 +770,7 @@ export default function Login() {
             text-align: center;
             font-size: 1.5rem;
             font-weight: 700;
-            border: 3px solid #87CEEB;
+            border: 2px solid #87CEEB;
             border-radius: 10px;
             background: #f8f9fa;
             color: #333;

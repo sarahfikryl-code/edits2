@@ -291,7 +291,7 @@ export default function ChangeStudentAccountPassword() {
 
   return (
     <div className="page-wrapper" style={{ padding: "20px 5px 20px 5px" }}>
-      <div className="main-container" style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
+      <div className="main-container" style={{ maxWidth: 800, margin: "40px auto", padding: "25px" }}>
         <style jsx>{`
           .page-wrapper {
             padding: 20px 5px 20px 5px;
@@ -513,7 +513,6 @@ export default function ChangeStudentAccountPassword() {
             }
             .form-container, .info-container {
               padding: 20px;
-              border-radius: 12px;
             }
             .student-details {
               grid-template-columns: 1fr;
@@ -564,7 +563,6 @@ export default function ChangeStudentAccountPassword() {
             }
             .form-container, .info-container {
               padding: 16px;
-              border-radius: 10px;
               margin-bottom: 16px;
             }
             .fetch-form {

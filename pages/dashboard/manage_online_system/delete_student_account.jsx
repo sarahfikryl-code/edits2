@@ -162,7 +162,7 @@ export default function DeleteStudentAccount() {
 
   return (
     <div style={{ padding: "20px 5px 20px 5px" }}>
-      <div style={{ maxWidth: 800, margin: "40px auto", padding: "20px 5px 20px 5px" }}>
+      <div style={{ maxWidth: 800, margin: "40px auto", padding: "25px" }}>
         <style jsx>{`
           .title {
             font-size: 2rem;
